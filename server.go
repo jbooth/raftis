@@ -1,11 +1,11 @@
-package merchdb
+package raftis
 
 import (
 	"fmt"
 	redis "github.com/docker/go-redis-server"
 	"github.com/jbooth/flotilla"
 	mdb "github.com/jbooth/gomdb"
-	ops "github.com/jbooth/merchdb/ops"
+	ops "github.com/jbooth/raftis/ops"
 	"io"
 	"log"
 	"net"
@@ -39,7 +39,7 @@ type Server struct {
 }
 
 func NewServer(redisBind string, flotillaBind string, dataDir string, flotillaPeers []string) (*Server, error) {
-	lg := log.New(os.Stderr, fmt.Sprintf("MerchDB %s:\t", redisBind), log.LstdFlags)
+	lg := log.New(os.Stderr, fmt.Sprintf("Raftis %s:\t", redisBind), log.LstdFlags)
 	// start flotilla
 	// peers []string, dataDir string, bindAddr string, ops map[string]Command
 	f, err := flotilla.NewDefaultDB(flotillaPeers, dataDir, flotillaBind, writeOps)

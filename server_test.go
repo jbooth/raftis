@@ -1,4 +1,4 @@
-package merchdb
+package raftis
 
 import (
 	"fmt"
@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-func TestMerchDB(t *testing.T) {
-	os.RemoveAll("/tmp/merchdbTest")
-	os.MkdirAll("/tmp/merchdbTest", os.FileMode(0777))
+func TestRaftis(t *testing.T) {
+	os.RemoveAll("/tmp/raftisTest")
+	os.MkdirAll("/tmp/raftisTest", os.FileMode(0777))
 
-	homeDirs := []string{"/tmp/merchdbTest/1", "/tmp/merchdbTest/2", "/tmp/merchdbTest/3"}
+	homeDirs := []string{"/tmp/raftisTest/1", "/tmp/raftisTest/2", "/tmp/raftisTest/3"}
 	redisAddrs := []string{"localhost:6379", "localhost:6389", "localhost:6399"}
 	flotAddrs := []string{"localhost:1101", "localhost:1102", "localhost:1103"}
 

@@ -8,7 +8,7 @@ import (
 )
 
 func TestDbFunctions(t *testing.T) {
-	dbPath := "/tmp/merchDbTest"
+	dbPath := "/tmp/rhashtest"
 	err := os.RemoveAll(dbPath)
 	if err != nil {
 		panic(err)
