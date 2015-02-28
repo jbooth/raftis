@@ -3,6 +3,7 @@ package ops
 import (
 	"fmt"
 	mdb "github.com/jbooth/gomdb"
+	redis "github.com/jbooth/raftis/redis"
 )
 
 // args are key, val
@@ -17,9 +18,9 @@ func SET(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	fmt.Printf("SET %s %s \n", string(key), string(val))
 	err = txn.Put(dbi, key, val, 0)
 	if err != nil {
-		return WrapStatus(err.Error()), nil
+		return redis.WrapStatus(err.Error()), nil
 	}
-	return WrapStatus("OK"), txn.Commit()
+	return redis.WrapStatus("OK"), txn.Commit()
 }
 
 // args are key, newVal, returns oldVal
@@ -33,13 +34,13 @@ func GETSET(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	}
 	oldVal, err := txn.Get(dbi, key)
 	if err != nil {
-		return WrapStatus(err.Error()), nil
+		return redis.WrapStatus(err.Error()), nil
 	}
 	err = txn.Put(dbi, key, newVal, 0)
 	if err != nil {
-		return WrapStatus(err.Error()), nil
+		return redis.WrapStatus(err.Error()), nil
 	}
-	return WrapString(oldVal), txn.Commit()
+	return redis.WrapString(oldVal), txn.Commit()
 }
 
 // args are key, val
@@ -55,12 +56,12 @@ func SETNX(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	if err == mdb.NotFound {
 		err = txn.Put(dbi, key, newVal, 0)
 		if err != nil {
-			return WrapStatus(err.Error()), nil
+			return redis.WrapStatus(err.Error()), nil
 		}
-		return WrapInt(1), txn.Commit() //success
+		return redis.WrapInt(1), txn.Commit() //success
 	}
 	if err != nil {
-		return WrapStatus(err.Error()), nil
+		return redis.WrapStatus(err.Error()), nil
 	}
-	return WrapInt(0), nil // had key already
+	return redis.WrapInt(0), nil // had key already
 }

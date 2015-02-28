@@ -1,4 +1,4 @@
-package ops
+package redis
 
 import (
 	"io"
@@ -63,13 +63,4 @@ func (r StringReply) WriteTo(w io.Writer) (int64, error) {
 	}
 	wroteCrLf, err := w.Write([]byte("\r\n"))
 	return int64(wrote + wroteBytes + wroteCrLf), err
-}
-
-type ErrorReply struct {
-	Err error
-}
-
-func (r ErrorReply) WriteTo(w io.Writer) (int64, error) {
-	ret1, ret2 := w.Write([]byte("-" + r.Err.Error() + "\r\n"))
-	return int64(ret1), ret2
 }

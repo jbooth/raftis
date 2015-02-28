@@ -1,9 +1,8 @@
-package merchdb
+package redis
 
 import (
 	"bufio"
 	"fmt"
-	redis "github.com/docker/go-redis-server"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -11,7 +10,7 @@ import (
 
 // redis parsing code courtesy of github.com/docker/go-redis-server
 
-func parseRequest(conn io.ReadCloser) (*redis.Request, error) {
+func ParseRequest(conn io.ReadCloser) (*Request, error) {
 	r := bufio.NewReader(conn)
 	// first line of redis request should be:
 	// *<number of arguments>CRLF
@@ -43,7 +42,7 @@ func parseRequest(conn io.ReadCloser) (*redis.Request, error) {
 			}
 		}
 
-		return &redis.Request{
+		return &Request{
 			Name: strings.ToLower(string(firstArg)),
 			Args: args,
 			Body: conn,
@@ -59,7 +58,7 @@ func parseRequest(conn io.ReadCloser) (*redis.Request, error) {
 			args = append(args, []byte(arg))
 		}
 	}
-	return &redis.Request{
+	return &Request{
 		Name: strings.ToLower(string(fields[0])),
 		Args: args,
 		Body: conn,
@@ -103,7 +102,7 @@ func readArgument(r *bufio.Reader) ([]byte, error) {
 }
 
 func malformed(expected string, got string) error {
-	redis.Debugf("Mailformed request:'%s does not match %s\\r\\n'", got, expected)
+	Debugf("Mailformed request:'%s does not match %s\\r\\n'", got, expected)
 	return fmt.Errorf("Mailformed request:'%s does not match %s\\r\\n'", got, expected)
 }
 

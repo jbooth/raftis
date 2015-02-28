@@ -1,6 +1,7 @@
 package raftis
 
 import (
+	redis "github.com/jbooth/raftis/redis"
 	"io"
 	"log"
 	"net"
@@ -25,7 +26,7 @@ func (conn Conn) serveClient(s *Server) (err error) {
 	go sendResponses(responses, conn, s.lg)
 	// read requests
 	for {
-		request, err := parseRequest(conn)
+		request, err := redis.ParseRequest(conn)
 		if err != nil {
 			return err
 		}

@@ -2,10 +2,10 @@ package raftis
 
 import (
 	"fmt"
-	redis "github.com/docker/go-redis-server"
 	"github.com/jbooth/flotilla"
 	mdb "github.com/jbooth/gomdb"
 	ops "github.com/jbooth/raftis/ops"
+	redis "github.com/jbooth/raftis/redis"
 	"io"
 	"log"
 	"net"
@@ -94,8 +94,7 @@ func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 			return r
 		}
 	}
-	// TODO use proper lib for this
-	return ops.ErrorReply{fmt.Errorf("Unknown command %s", r.Name)}
+	return redis.NewError(fmt.Sprintf("Unknown command %s", r.Name))
 }
 
 type pendingWrite struct {
@@ -106,7 +105,7 @@ func (p pendingWrite) WriteTo(w io.Writer) (int64, error) {
 	resp := <-p.r
 	// wrap any error as a response to client
 	if resp.Err != nil {
-		return ops.ErrorReply{resp.Err}.WriteTo(w)
+		return redis.NewError(resp.Err.Error()).WriteTo(w)
 	}
 	n, err := w.Write(resp.Response)
 	return int64(n), err
@@ -121,7 +120,7 @@ type pendingRead struct {
 func (p pendingRead) WriteTo(w io.Writer) (int64, error) {
 	txn, err := p.s.flotilla.Read()
 	if err != nil {
-		return ops.ErrorReply{err}.WriteTo(w)
+		return redis.NewError(err.Error()).WriteTo(w)
 	}
 	defer txn.Abort()
 	return p.op(p.args, txn, w)
@@ -136,7 +135,7 @@ func (p pendingSyncRead) WriteTo(w io.Writer) (int64, error) {
 	// wait for no-op to sync
 	noopResp := <-p.noop
 	if noopResp.Err != nil {
-		return ops.ErrorReply{noopResp.Err}.WriteTo(w)
+		return redis.NewError(noopResp.Err.Error()).WriteTo(w)
 	}
 	// handle as normal read
 	return p.r.WriteTo(w)
