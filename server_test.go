@@ -31,6 +31,7 @@ func TestRaftis(t *testing.T) {
 				panic(err)
 			}
 			dbs[j], err = NewServer(redisAddrs[j], flotAddrs[j], homeDirs[j], flotAddrs)
+			go dbs[j].Serve()
 			fmt.Printf("Pushing err to chan for %d\n", j)
 			waitingUp[j] <- err
 			fmt.Printf("Sent err to chan for %d\n", j)

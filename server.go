@@ -56,19 +56,15 @@ func NewServer(redisBind string, flotillaBind string, dataDir string, flotillaPe
 		return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", redisBind, err)
 	}
 	s := &Server{f, redisListen, lg}
-	// dispatch server
-	go func() {
-		err = s.serve()
-		if err != nil {
-			lg.Printf("server on %s going down: %s", redisBind, err)
-		}
-	}()
 	return s, nil
 }
 
-func (s *Server) serve() (err error) {
-	defer s.redis.Close()
-	defer s.flotilla.Close()
+func (s *Server) Serve() (err error) {
+	defer func(s *Server) {
+		s.redis.Close()
+		s.flotilla.Close()
+		s.lg.Printf("server on %s going down: %s", s.redis.Addr().String(), err)
+	}(s)
 	for {
 		c, err := s.redis.AcceptTCP()
 		if err != nil {
