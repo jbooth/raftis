@@ -65,3 +65,29 @@ func SETNX(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	}
 	return redis.WrapInt(0), nil // had key already
 }
+
+// args are key, val
+func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+	key := args[0]
+	appendVal := args[1]
+	table := "onlyTable"
+	dbi, err := txn.DBIOpen(&table, mdb.CREATE)
+	if err != nil {
+		return nil, err
+	}
+	var val []byte;
+	val, err = txn.Get(dbi, key)
+	if err == mdb.NotFound {
+		val = appendVal
+	} else if err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	} else {
+		val = append(val, appendVal...)
+	}
+
+	err = txn.Put(dbi, key, val, 0)
+	if err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	}
+	return redis.WrapString(val), txn.Commit() //success
+}
