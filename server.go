@@ -23,6 +23,7 @@ var (
 		"SET":    ops.SET,
 		"GETSET": ops.GETSET,
 		"SETNX":  ops.SETNX,
+		"APPEND":  ops.APPEND,
 		// noop is for sync requests
 		"NOOP": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return emptyBytes, nil },
 	}
