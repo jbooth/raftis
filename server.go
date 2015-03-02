@@ -24,6 +24,10 @@ var (
 		"GETSET": ops.GETSET,
 		"SETNX":  ops.SETNX,
 		"APPEND": ops.APPEND,
+    "INCR":   ops.INCR,
+    "DECR":   ops.DECR,
+    "INCRBY": ops.INCRBY,
+    "DECRBY": ops.DECRBY,
 		// noop is for sync requests
 		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return redis.WrapString([]byte("PONG!")), nil },
 	}
