@@ -26,6 +26,10 @@ func WrapString(v []byte) []byte {
 	return ret
 }
 
+func WrapNil() []byte {
+	return WrapString(nil)
+}
+
 func ReplyString(w io.Writer, v []byte) (int64, error) {
 	if v == nil || len(v) == 0 {
 		n, err := w.Write([]byte("$-1\r\n"))
