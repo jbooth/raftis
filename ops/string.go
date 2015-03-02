@@ -67,6 +67,7 @@ func SETNX(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 }
 
 // args are key, val
+// return value is int of new val length
 func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	key := args[0]
 	appendVal := args[1]
@@ -75,7 +76,7 @@ func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var val []byte;
+	var val []byte
 	val, err = txn.Get(dbi, key)
 	if err == mdb.NotFound {
 		val = appendVal
@@ -89,5 +90,5 @@ func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	if err != nil {
 		return redis.WrapStatus(err.Error()), nil
 	}
-	return redis.WrapString(val), txn.Commit() //success
+	return redis.WrapInt(len(val)), txn.Commit() //success
 }
