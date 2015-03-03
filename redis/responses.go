@@ -13,8 +13,9 @@ func WrapInt(v int) []byte {
 	return []byte(":" + strconv.Itoa(v) + "\r\n")
 }
 
-func WrapString(v []byte) []byte {
-	if v == nil || len(v) == 0 {
+func WrapString(vs string) []byte {
+	v := []byte(vs)
+	if len(v) == 0 {
 		return []byte("$-1\r\n")
 	}
 	header := []byte("$" + strconv.Itoa(len(v)) + "\r\n")
@@ -27,11 +28,12 @@ func WrapString(v []byte) []byte {
 }
 
 func WrapNil() []byte {
-	return WrapString(nil)
+	return WrapString("")
 }
 
-func ReplyString(w io.Writer, v []byte) (int64, error) {
-	if v == nil || len(v) == 0 {
+func ReplyString(w io.Writer, vs string) (int64, error) {
+	v := []byte(vs)
+	if len(v) == 0 {
 		n, err := w.Write([]byte("$-1\r\n"))
 		return int64(n), err
 	}
