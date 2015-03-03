@@ -28,6 +28,7 @@ var (
 		"DECR":   ops.DECR,
 		"INCRBY": ops.INCRBY,
 		"DECRBY": ops.DECRBY,
+		"DEL":    ops.DEL,
 		// noop is for sync requests
 		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return redis.WrapString([]byte("PONG!")), nil },
 	}
