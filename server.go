@@ -35,6 +35,7 @@ var (
 	readOps = map[string]readOp{
 		"GET":    ops.GET,
 		"STRLEN": ops.STRLEN,
+		"EXISTS": ops.EXISTS,
 	}
 )
 
