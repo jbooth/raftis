@@ -8,7 +8,7 @@ import (
 
 type ClusterConfig struct {
 	NumSlots uint32
-	Whoami   string // flotilla addr
+	Me       Host // should match a host in one of our shards exactly to identify which peergroup we join
 	Shards   []Shard
 }
 
