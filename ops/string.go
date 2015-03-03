@@ -97,137 +97,44 @@ func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 }
 
 
-func INCR(args [][]byte, txn *mdb.Txn) ([]byte, error) {
-	key := args[0]
+func Counter(key []byte, increment int, txn *mdb.Txn) ([]byte, error) {
   table := "onlyTable"
 	dbi, err := txn.DBIOpen(&table, mdb.CREATE)
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
 
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
+  current_value, err := txn.Get(dbi, key)
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
 
-  oldVal, err := txn.Get(dbi, key)
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
+  current_value_int, err := strconv.Atoi(string(current_value[:]))
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
 
-  oldValInt, err := strconv.Atoi(string(oldVal[:]))
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
+  new_value_int := current_value_int + increment
+  new_value := strconv.Itoa(new_value_int)
+	err = txn.Put(dbi, key, []byte(new_value), 0)
+	if err != nil { return redis.WrapStatus(err.Error()), nil }
 
-  newVal := oldValInt + 1
-  newValStr := strconv.Itoa(newVal)
-	err = txn.Put(dbi, key, []byte(newValStr), 0)
-	if err != nil {
-		return redis.WrapStatus(err.Error()), nil
-	}
-
-
-  return redis.WrapInt(newVal), txn.Commit()
+  return redis.WrapInt(new_value_int), txn.Commit()
 }
 
+func INCR(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+  return Counter(args[0], 1, txn)
+}
 
 func DECR(args [][]byte, txn *mdb.Txn) ([]byte, error) {
-	key := args[0]
-  table := "onlyTable"
-	dbi, err := txn.DBIOpen(&table, mdb.CREATE)
-
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  oldVal, err := txn.Get(dbi, key)
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  oldValInt, err := strconv.Atoi(string(oldVal[:]))
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  newVal := oldValInt - 1
-  newValStr := strconv.Itoa(newVal)
-	err = txn.Put(dbi, key, []byte(newValStr), 0)
-	if err != nil {
-		return redis.WrapStatus(err.Error()), nil
-	}
-
-  return redis.WrapInt(newVal), txn.Commit()
+  return Counter(args[0], -1, txn)
 }
-
 
 func INCRBY(args [][]byte, txn *mdb.Txn) ([]byte, error) {
-	key := args[0]
-  incr_raw :=  args[1]
+  increment, err := strconv.Atoi(string(args[1][:]))
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
 
-  incr, err := strconv.Atoi(string(incr_raw[:]))
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  table := "onlyTable"
-	dbi, err := txn.DBIOpen(&table, mdb.CREATE)
-
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  oldVal, err := txn.Get(dbi, key)
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  oldValInt, err := strconv.Atoi(string(oldVal[:]))
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  newVal := oldValInt + incr
-  newValStr := strconv.Itoa(newVal)
-	err = txn.Put(dbi, key, []byte(newValStr), 0)
-	if err != nil {
-		return redis.WrapStatus(err.Error()), nil
-	}
-
-  return redis.WrapInt(newVal), txn.Commit()
+  return Counter(args[0], increment, txn)
 }
 
-
 func DECRBY(args [][]byte, txn *mdb.Txn) ([]byte, error) {
-	key := args[0]
-  step_raw :=  args[1]
+  increment, err := strconv.Atoi(string(args[1][:]))
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
 
-  step, err := strconv.Atoi(string(step_raw[:]))
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  table := "onlyTable"
-	dbi, err := txn.DBIOpen(&table, mdb.CREATE)
-
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  oldVal, err := txn.Get(dbi, key)
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  oldValInt, err := strconv.Atoi(string(oldVal[:]))
-  if err != nil {
-    return redis.WrapStatus(err.Error()), nil
-  }
-
-  newVal := oldValInt - step
-  newValStr := strconv.Itoa(newVal)
-	err = txn.Put(dbi, key, []byte(newValStr), 0)
-	if err != nil {
-		return redis.WrapStatus(err.Error()), nil
-	}
-
-  return redis.WrapInt(newVal), txn.Commit()
+  return Counter(args[0], -increment, txn)
 }
 
