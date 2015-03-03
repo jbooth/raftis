@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+  "strconv"
 	mdb "github.com/jbooth/gomdb"
 	redis "github.com/jbooth/raftis/redis"
 )
@@ -74,6 +75,8 @@ func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	table := "onlyTable"
 	dbi, err := txn.DBIOpen(&table, mdb.CREATE)
 	if err != nil {
+
+
 		return nil, err
 	}
 	var val []byte
@@ -92,3 +95,46 @@ func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	}
 	return redis.WrapInt(len(val)), txn.Commit() //success
 }
+
+
+func Counter(key []byte, increment int, txn *mdb.Txn) ([]byte, error) {
+  table := "onlyTable"
+	dbi, err := txn.DBIOpen(&table, mdb.CREATE)
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
+
+  current_value, err := txn.Get(dbi, key)
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
+
+  current_value_int, err := strconv.Atoi(string(current_value[:]))
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
+
+  new_value_int := current_value_int + increment
+  new_value := strconv.Itoa(new_value_int)
+	err = txn.Put(dbi, key, []byte(new_value), 0)
+	if err != nil { return redis.WrapStatus(err.Error()), nil }
+
+  return redis.WrapInt(new_value_int), txn.Commit()
+}
+
+func INCR(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+  return Counter(args[0], 1, txn)
+}
+
+func DECR(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+  return Counter(args[0], -1, txn)
+}
+
+func INCRBY(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+  increment, err := strconv.Atoi(string(args[1][:]))
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
+
+  return Counter(args[0], increment, txn)
+}
+
+func DECRBY(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+  increment, err := strconv.Atoi(string(args[1][:]))
+  if err != nil { return redis.WrapStatus(err.Error()), nil }
+
+  return Counter(args[0], -increment, txn)
+}
+
