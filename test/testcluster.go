@@ -53,6 +53,9 @@ func setupTest() {
 					panic(err)
 				}
 				testcluster.dbs[j], err = raftis.NewServer(testcluster.redisAddrs[j], testcluster.flotAddrs[j], testcluster.homeDirs[j], testcluster.flotAddrs)
+				if err != nil {
+					panic(err)
+				}
 				go testcluster.dbs[j].Serve()
 				fmt.Printf("Pushing err to chan for %d\n", j)
 				waitingUp[j] <- err
