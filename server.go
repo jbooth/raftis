@@ -29,8 +29,10 @@ var (
 		"INCRBY": ops.INCRBY,
 		"DECRBY": ops.DECRBY,
 		"DEL":    ops.DEL,
+		// ttls
+		"EXPIRE":    ops.EXPIRE,
 		// noop is for sync requests
-		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return redis.WrapString([]byte("PONG!")), nil },
+		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return redis.WrapString("PONG!"), nil },
 	}
 
 	readOps = map[string]readOp{

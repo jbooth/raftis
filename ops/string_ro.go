@@ -3,54 +3,37 @@ package ops
 import (
 	mdb "github.com/jbooth/gomdb"
 	redis "github.com/jbooth/raftis/redis"
+	utils "github.com/jbooth/raftis/utils"
 	"io"
 )
 
 // 1 arg, key
 func GET(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 	key := args[0]
-	table := "onlyTable"
 	println("GET " + string(key))
-	dbi, err := txn.DBIOpen(&table, 0)
-	if err != nil {
-		return redis.NewError(err.Error()).WriteTo(w)
-	}
-	val, err := txn.GetVal(dbi, key)
-	var resp redis.ReplyWriter
-
+	val, err := utils.GetString(txn, key)
 	if err == mdb.NotFound {
 		// Not found is nil in redis
-		resp = redis.NilReply
+		return redis.NilReply.WriteTo(w)
 	} else if err != nil {
 		// write error
-		resp = redis.NewError(err.Error())
-	} else {
-		resp = &redis.BulkReply{val.RawBytes()}
+		return redis.NewError(err.Error()).WriteTo(w)
 	}
-	// write result
+	resp := &redis.BulkReply{[]byte(val)}
 	return resp.WriteTo(w)
 }
 
+// 1 arg, key
 func STRLEN(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 	key := args[0]
-	table := "onlyTable"
-	println("STRLEN" + string(key))
-	dbi, err := txn.DBIOpen(&table, 0)
-	if err != nil {
+	println("STRLEN " + string(key))
+	val, err := utils.GetString(txn, key)
+	if err == mdb.NotFound {
+		resp := &redis.IntegerReply{0}
+		return resp.WriteTo(w)
+	} else if err != nil {
 		return redis.NewError(err.Error()).WriteTo(w)
 	}
-	val, err := txn.GetVal(dbi, key)
-	var resp redis.ReplyWriter
-	if err == mdb.NotFound {
-		// Redis returns 0 for non-exisiting keys
-		resp = &redis.IntegerReply{0}
-	} else if err != nil {
-		// write error
-		resp = redis.NewError(err.Error())
-	} else {
-		resp = &redis.IntegerReply{len(val.String())}
-	}
-	// write result
+	resp := &redis.IntegerReply{len(val)}
 	return resp.WriteTo(w)
-
 }
