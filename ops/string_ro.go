@@ -30,3 +30,27 @@ func GET(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 	// write result
 	return resp.WriteTo(w)
 }
+
+func STRLEN(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
+	key := args[0]
+	table := "onlyTable"
+	println("STRLEN" + string(key))
+	dbi, err := txn.DBIOpen(&table, 0)
+	if err != nil {
+		return redis.NewError(err.Error()).WriteTo(w)
+	}
+	val, err := txn.GetVal(dbi, key)
+	var resp redis.ReplyWriter
+	if err == mdb.NotFound {
+		// Redis returns 0 for non-exisiting keys
+		resp = &redis.IntegerReply{0}
+	} else if err != nil {
+		// write error
+		resp = redis.NewError(err.Error())
+	} else {
+		resp = &redis.IntegerReply{len(val.String())}
+	}
+	// write result
+	return resp.WriteTo(w)
+
+}
