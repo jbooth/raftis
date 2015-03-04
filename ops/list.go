@@ -19,6 +19,16 @@ func MembersToMembersList(members [][]byte) []byte {
 	return AppendMembersToMembersList(nil, members)
 }
 
+func MembersListToMembers(n int, membersList []byte) [][]byte {
+	members := make([][]byte, n)
+	for i := 0; i < n; i++ {
+		l, rest := ExtractLength(membersList)
+		members[i] = rest[:l]
+		membersList = rest[l:]
+	}
+	return members
+}
+
 func AppendMembersToMembersList(membersList []byte, members [][]byte) []byte {
 	for _, member := range members {
 		membersList = append(membersList, withLength(member)...)
