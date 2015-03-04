@@ -30,7 +30,7 @@ var (
 		"DECRBY": ops.DECRBY,
 		"DEL":    ops.DEL,
 		// ttls
-		"EXPIRE":    ops.EXPIRE,
+		"EXPIRE": ops.EXPIRE,
 		// noop is for sync requests
 		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return redis.WrapString("PONG!"), nil },
 	}
@@ -48,22 +48,39 @@ type Server struct {
 	lg       *log.Logger
 }
 
-func NewServer(redisBind string, flotillaBind string, dataDir string, flotillaPeers []string) (*Server, error) {
-	lg := log.New(os.Stderr, fmt.Sprintf("Raftis %s:\t", redisBind), log.LstdFlags)
+func NewServer(c *ClusterConfig, dataDir string) (*Server, error) {
+	lg := log.New(os.Stderr, fmt.Sprintf("Raftis %s:\t", c.Me.RedisAddr), log.LstdFlags)
+	// find our replicaset
+	var ours []Host = nil
+	for _, s := range c.Shards {
+		for _, h := range s.Hosts {
+			if h.RedisAddr == c.Me.RedisAddr && h.FlotillaAddr == c.Me.FlotillaAddr {
+				ours = s.Hosts
+			}
+		}
+	}
+	if ours == nil {
+		return nil, fmt.Errorf("Host %+v not in hosts %+v", c.Me, c.Shards)
+	}
+	flotillaPeers := make([]string, len(ours), len(ours))
+	for idx, h := range ours {
+		flotillaPeers[idx] = h.FlotillaAddr
+	}
+
 	// start flotilla
 	// peers []string, dataDir string, bindAddr string, ops map[string]Command
-	f, err := flotilla.NewDefaultDB(flotillaPeers, dataDir, flotillaBind, writeOps)
+	f, err := flotilla.NewDefaultDB(flotillaPeers, dataDir, c.Me.FlotillaAddr, writeOps)
 	if err != nil {
 		return nil, err
 	}
 	// listen on redis port
-	redisAddr, err := net.ResolveTCPAddr("tcp4", redisBind)
+	redisAddr, err := net.ResolveTCPAddr("tcp4", c.Me.RedisAddr)
 	if err != nil {
-		return nil, fmt.Errorf("Couldn't resolve redisBind %s : %s", redisBind, err)
+		return nil, fmt.Errorf("Couldn't resolve redisAddr %s : %s", c.Me.RedisAddr, err)
 	}
 	redisListen, err := net.ListenTCP("tcp4", redisAddr)
 	if err != nil {
-		return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", redisBind, err)
+		return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", c.Me.RedisAddr, err)
 	}
 	s := &Server{f, redisListen, lg}
 	return s, nil
