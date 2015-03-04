@@ -1,7 +1,7 @@
 package ops
 
 import (
-	"fmt"
+//	"fmt"
 	"strconv"
 	mdb "github.com/jbooth/gomdb"
 	redis "github.com/jbooth/raftis/redis"
@@ -17,7 +17,6 @@ func SET(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("SET %s %s \n", string(key), val)
 	err = txn.Put(dbi, key, dbwrap.BuildString(0, val), 0)
 	if err != nil {
 		return redis.WrapStatus(err.Error()), nil
