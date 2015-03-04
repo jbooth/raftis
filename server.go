@@ -30,7 +30,8 @@ var (
 		"DECRBY": ops.DECRBY,
 		"DEL":    ops.DEL,
 		// ttls
-		"EXPIRE":    ops.EXPIRE,
+		"EXPIRE": ops.EXPIRE,
+		"RPUSH":  ops.RPUSH,
 		// noop is for sync requests
 		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return redis.WrapString("PONG!"), nil },
 	}
@@ -39,6 +40,7 @@ var (
 		"GET":    ops.GET,
 		"STRLEN": ops.STRLEN,
 		"EXISTS": ops.EXISTS,
+		"LLEN":   ops.LLEN,
 	}
 )
 
