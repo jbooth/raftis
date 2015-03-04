@@ -11,7 +11,7 @@ from tempfile import NamedTemporaryFile
 import threading
 
 from fabric.decorators import hosts
-from fabric.api import task, env, sudo, puts
+from fabric.api import task, env, sudo, puts, parallel
 from fabric.operations import put
 
 from novaclient.client import Client
@@ -56,6 +56,7 @@ end script"""
 #
 
 @task
+@parallel
 @hosts(raftis_cluster_hosts())
 def deploy():
   config_file = NamedTemporaryFile()
@@ -89,12 +90,13 @@ def deploy():
 
 
 @task
-
+@parallel
 @hosts(raftis_cluster_hosts())
 def start():
   sudo('start raftis')
 
 @task
+@parallel
 @hosts(raftis_cluster_hosts())
 def stop():
   from fabric.api import settings
