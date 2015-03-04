@@ -24,33 +24,42 @@ func ParseRawValue(rawVal []byte) (uint32, uint8, []byte) {
 }
 
 func ParseString(rawVal []byte) (uint32, string, error) {
-	expiration, type_, val :=  ParseRawValue([]byte(rawVal))
+	expiration, type_, val := ParseRawValue([]byte(rawVal))
 	if type_ != STRING {
 		return 0, "", errors.New("type mismatch")
 	}
 	return expiration, string(val), nil
 }
 
+func ParseList(rawVal []byte) (uint32, []byte, error) {
+	expiration, type_, val := ParseRawValue([]byte(rawVal))
+	if type_ != LIST {
+		return 0, nil, errors.New("type mismatch")
+	}
+	return expiration, val, nil
+}
+
 // build
-func BuildRawValue(expiration uint32, type_ uint8, val []byte) ([] byte) {
+func BuildRawValue(expiration uint32, type_ uint8, val []byte) []byte {
 	rawVal := append(make([]byte, 4), byte(type_))
 	rawVal = append(rawVal, val...)
 	binary.LittleEndian.PutUint32(rawVal[0:4], expiration)
 	return rawVal
 }
 
-func BuildString(expiration uint32, val string) ([] byte) {
+func BuildString(expiration uint32, val string) []byte {
 	return BuildRawValue(expiration, STRING, []byte(val))
 }
 
 // ttls
 const epoch int64 = 1425410200
-func GetNow() (uint32) {
-	return uint32(time.Now().Unix()-epoch)
+
+func GetNow() uint32 {
+	return uint32(time.Now().Unix() - epoch)
 }
 
 // convenience
-func getBytes(txn *mdb.Txn, key []byte, dbiFlags uint) (mdb.DBI, []byte, error) {
+func GetBytes(txn *mdb.Txn, key []byte, dbiFlags uint) (mdb.DBI, []byte, error) {
 	table := "onlyTable"
 	dbi, err := txn.DBIOpen(&table, dbiFlags)
 	if err != nil {
@@ -64,7 +73,7 @@ func getBytes(txn *mdb.Txn, key []byte, dbiFlags uint) (mdb.DBI, []byte, error) 
 }
 
 func GetRawValueForWrite(txn *mdb.Txn, key []byte) (mdb.DBI, uint32, uint8, []byte, error) {
-	dbi, rawVal, err := getBytes(txn, key, mdb.CREATE)
+	dbi, rawVal, err := GetBytes(txn, key, mdb.CREATE)
 	if err != nil {
 		return dbi, 0, 0, nil, err
 	}
@@ -76,7 +85,7 @@ func GetRawValueForWrite(txn *mdb.Txn, key []byte) (mdb.DBI, uint32, uint8, []by
 }
 
 func GetString(txn *mdb.Txn, key []byte) (string, error) {
-	_, rawVal, err := getBytes(txn, key, 0)
+	_, rawVal, err := GetBytes(txn, key, 0)
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +100,7 @@ func GetString(txn *mdb.Txn, key []byte) (string, error) {
 }
 
 func GetStringForWrite(txn *mdb.Txn, key []byte) (mdb.DBI, uint32, string, error) {
-	dbi, rawVal, err := getBytes(txn, key, mdb.CREATE)
+	dbi, rawVal, err := GetBytes(txn, key, mdb.CREATE)
 	if err != nil {
 		return dbi, 0, "", err
 	}
@@ -105,6 +114,36 @@ func GetStringForWrite(txn *mdb.Txn, key []byte) (mdb.DBI, uint32, string, error
 	return dbi, expiration, val, nil
 }
 
-func Expired(expiration uint32) (bool) {
+func GetRawList(txn *mdb.Txn, key []byte) ([]byte, error) {
+	_, rawVal, err := GetBytes(txn, key, 0)
+	if err != nil {
+		return nil, err
+	}
+	expiration, val, err := ParseList(rawVal)
+	if err != nil {
+		return nil, err
+	}
+	if Expired(expiration) {
+		return nil, mdb.NotFound
+	}
+	return val, nil
+}
+
+func GetRawListForWrite(txn *mdb.Txn, key []byte) (mdb.DBI, uint32, []byte, error) {
+	dbi, rawVal, err := GetBytes(txn, key, mdb.CREATE)
+	if err != nil {
+		return dbi, 0, nil, err
+	}
+	expiration, val, err := ParseList(rawVal)
+	if err != nil {
+		return dbi, 0, nil, err
+	}
+	if Expired(expiration) {
+		return dbi, 0, nil, mdb.NotFound
+	}
+	return dbi, expiration, val, nil
+}
+
+func Expired(expiration uint32) bool {
 	return expiration != 0 && expiration < GetNow()
 }
