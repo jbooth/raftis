@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"fmt"
 	"bytes"
 	"errors"
 	"io"
@@ -39,21 +40,24 @@ func writeBytes(value interface{}, w io.Writer) (int64, error) {
 		return int64(n), err
 	}
 	switch v := value.(type) {
+	case [][]byte:
+		fmt.Printf("val test %s", v)
+		fmt.Printf("len val %s", len(v))
+		wrote, err := w.Write([]byte("*" + strconv.Itoa(len(v)) + "\r\n"))
+		wrote64 := int64(wrote)
+		if err != nil {
+			return wrote64, err
+		}
+		for _, e := range v {
+			wroteBytes, err := writeBytes(e, w)
+			wrote64 += wroteBytes
+			if err != nil {
+				return wrote64, err
+			}
+		}
+		return wrote64, nil
 	case string:
-		if len(v) == 0 {
-			n, err := w.Write([]byte("$-1\r\n"))
-			return int64(n), err
-		}
-		wrote, err := w.Write([]byte("$" + strconv.Itoa(len(v)) + "\r\n"))
-		if err != nil {
-			return int64(wrote), err
-		}
-		wroteBytes, err := w.Write([]byte(v))
-		if err != nil {
-			return int64(wrote + wroteBytes), err
-		}
-		wroteCrLf, err := w.Write([]byte("\r\n"))
-		return int64(wrote + wroteBytes + wroteCrLf), err
+		return writeBytes([]byte(v), w)
 	case []byte:
 		if len(v) == 0 {
 			n, err := w.Write([]byte("$-1\r\n"))
@@ -82,6 +86,14 @@ func writeBytes(value interface{}, w io.Writer) (int64, error) {
 }
 
 func (r BulkReply) WriteTo(w io.Writer) (int64, error) {
+	return writeBytes(r.Value, w)
+}
+
+type ArrayReply struct {
+	Value [][]byte
+}
+
+func (r *ArrayReply) WriteTo(w io.Writer) (int64, error) {
 	return writeBytes(r.Value, w)
 }
 

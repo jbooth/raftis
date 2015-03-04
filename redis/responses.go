@@ -13,7 +13,7 @@ func WrapInt(v int) []byte {
 	return []byte(":" + strconv.Itoa(v) + "\r\n")
 }
 
-func WrapString(vs string) []byte {
+func WrapString(vs []byte) []byte {
 	v := []byte(vs)
 	if len(v) == 0 {
 		return []byte("$-1\r\n")
@@ -28,7 +28,7 @@ func WrapString(vs string) []byte {
 }
 
 func WrapNil() []byte {
-	return WrapString("")
+	return WrapString(nil)
 }
 
 func ReplyString(w io.Writer, vs string) (int64, error) {

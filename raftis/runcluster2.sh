@@ -14,35 +14,35 @@ function startraftis() {
     pid=$!
     echo $pid > $dir/pid
     echo "launched server$1, pid $pid"
-
-
 }
 
-function stopraftis() {
-    kill `cat $DIRBASE$i/pid`
-}
-
-function stopall() {
-    for i in {1..3};
-    do
-	pid=`cat $DIRBASE$i/pid`
-	kill $pid
-	echo "stopped $pid"
-    done;
-
-}
-
-trap stopall 2
-
-for i in {1..3};
-do
-    startraftis $i
-done;
-
-for i in {1..3};
-do
-    pid=`cat $DIRBASE$i/pid`
-    wait $pid
-    echo "$i down"
-    kill $pid
-done;
+case $1 in
+start)
+	echo starting raftis
+	for i in {1..3};
+	do
+	    startraftis $i
+	done;
+;;
+stop)
+	echo stopping raftis
+	for i in {1..3};
+	do
+	    pid=`cat $DIRBASE$i/pid`
+	    kill $pid
+	    echo "killed $pid"
+	done;
+	for i in {1..3};
+	do
+	    pid=`cat $DIRBASE$i/pid`
+            while kill -0 "$pid"; do
+		sleep 0.5
+            done
+	    echo "$pid returned"
+	done;
+	echo stopped raftis
+;;
+*)
+	echo "$0 {start|stop}"
+;;
+esac
