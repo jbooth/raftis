@@ -89,6 +89,7 @@ def deploy():
 
 
 @task
+
 @hosts(raftis_cluster_hosts())
 def start():
   sudo('start raftis')
@@ -96,8 +97,19 @@ def start():
 @task
 @hosts(raftis_cluster_hosts())
 def stop():
-  sudo('stop raftis')
+  from fabric.api import settings
+  service_name = 'raftis'
 
+  with settings(warn_only=True):
+    res = sudo('service {} status | grep running'.format(service_name))
+    if res.return_code == 0:
+      sudo('stop {}'.format(service_name))
+
+@task
+@hosts(raftis_cluster_hosts())
+def install():
+  sudo('apt-get install liblmdb0')
+  sudo('ln -s /usr/lib/x86_64-linux-gnu/liblmdb.so.0.0.0 /usr/lib/x86_64-linux-gnu/liblmdb.so')
 
 
 def gen_raftis_config(slots=1, outfile=sys.stdout):
