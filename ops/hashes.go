@@ -76,6 +76,36 @@ func HGETALL(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 
 
 // WRITES
+// args: key field value
+func HSET(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+	key := args[0]
+	field := string(args[1])
+	value := string(args[2])
+	fmt.Printf("HSET %s %s %s \n", string(key), field, value)
+
+	dbi, exp, val, err := dbwrap.GetHashForWrite(txn, key)
+	if err == mdb.NotFound {
+		val = make([][]byte, 0)
+		exp = 0
+	} else if err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	}
+
+	mapVal := dbwrap.MembersToMap(val)
+	ret := 1
+	if _, exists := mapVal[field]; exists {
+		ret = 0
+	}
+	mapVal[field] = value
+	newVal := dbwrap.MapToMembers(mapVal)
+
+	err = txn.Put(dbi, key, dbwrap.BuildHash(exp, newVal), 0)
+	if err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	}
+	return redis.WrapInt(ret), txn.Commit()
+}
+
 // args: key field value [field value ...]
 func HMSET(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	key := args[0]

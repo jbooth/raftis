@@ -32,6 +32,7 @@ var (
 		// lists
 		"RPUSH":    ops.RPUSH,
 		// hashes
+		"HSET":     ops.HSET,
 		"HMSET":    ops.HMSET,
 		"HINCRBY":  ops.HINCRBY,
 		"HDEL":     ops.HDEL,
@@ -51,6 +52,8 @@ var (
 		"HGET":  ops.HGET,
 		"HMGET":  ops.HMGET,
 		"HGETALL":  ops.HGETALL,
+		// ttl
+		"TTL":   ops.TTL,
 	}
 )
 

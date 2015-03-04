@@ -1,7 +1,6 @@
 package redis
 
 import (
-	"fmt"
 	"bytes"
 	"errors"
 	"io"
@@ -41,8 +40,6 @@ func writeBytes(value interface{}, w io.Writer) (int64, error) {
 	}
 	switch v := value.(type) {
 	case [][]byte:
-		fmt.Printf("val test %s", v)
-		fmt.Printf("len val %s", len(v))
 		wrote, err := w.Write([]byte("*" + strconv.Itoa(len(v)) + "\r\n"))
 		wrote64 := int64(wrote)
 		if err != nil {

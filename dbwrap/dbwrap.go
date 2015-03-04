@@ -96,6 +96,18 @@ func GetBytes(txn *mdb.Txn, key []byte, dbiFlags uint) (mdb.DBI, []byte, error) 
 	return dbi, rawVal, nil
 }
 
+func GetRawValue(txn *mdb.Txn, key []byte) (uint32, uint8, []byte, error) {
+	_, rawVal, err := GetBytes(txn, key, 0)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	expiration, type_, val := ParseRawValue(rawVal)
+	if Expired(expiration) {
+		return 0, 0, nil, mdb.NotFound
+	}
+	return expiration, type_, val, nil
+}
+
 func GetRawValueForWrite(txn *mdb.Txn, key []byte) (mdb.DBI, uint32, uint8, []byte, error) {
 	dbi, rawVal, err := GetBytes(txn, key, mdb.CREATE)
 	if err != nil {
