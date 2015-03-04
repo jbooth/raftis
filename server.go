@@ -7,7 +7,7 @@ import (
 	ops "github.com/jbooth/raftis/ops"
 	redis "github.com/jbooth/raftis/redis"
 	"io"
-	"log"
+  log "github.com/jbooth/raftis/rlog"
 	"net"
 	"os"
 )
@@ -75,7 +75,7 @@ func NewServer(redisBind string, flotillaBind string, dataDir string, flotillaPe
 	}
 	redisListen, err := net.ListenTCP("tcp4", redisAddr)
 	if err != nil {
-		return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", redisBind, err)
+    return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", redisBind, err)
 	}
 	s := &Server{f, redisListen, lg}
 	return s, nil
