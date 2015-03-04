@@ -19,7 +19,7 @@ func GET(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 		// write error
 		return redis.NewError(err.Error()).WriteTo(w)
 	}
-	resp := &redis.BulkReply{[]byte(val)}
+	resp := &redis.BulkReply{val}
 	return resp.WriteTo(w)
 }
 
