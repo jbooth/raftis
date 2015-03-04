@@ -3,7 +3,7 @@ package ops
 import (
 	mdb "github.com/jbooth/gomdb"
 	redis "github.com/jbooth/raftis/redis"
-	utils "github.com/jbooth/raftis/utils"
+	dbwrap "github.com/jbooth/raftis/dbwrap"
 	"io"
 )
 
@@ -11,7 +11,7 @@ import (
 func GET(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 	key := args[0]
 	println("GET " + string(key))
-	val, err := utils.GetString(txn, key)
+	val, err := dbwrap.GetString(txn, key)
 	if err == mdb.NotFound {
 		// Not found is nil in redis
 		return redis.NilReply.WriteTo(w)
@@ -27,7 +27,7 @@ func GET(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 func STRLEN(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 	key := args[0]
 	println("STRLEN " + string(key))
-	val, err := utils.GetString(txn, key)
+	val, err := dbwrap.GetString(txn, key)
 	if err == mdb.NotFound {
 		resp := &redis.IntegerReply{0}
 		return resp.WriteTo(w)

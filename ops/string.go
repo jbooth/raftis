@@ -5,7 +5,7 @@ import (
 	"strconv"
 	mdb "github.com/jbooth/gomdb"
 	redis "github.com/jbooth/raftis/redis"
-	utils "github.com/jbooth/raftis/utils"
+	dbwrap "github.com/jbooth/raftis/dbwrap"
 )
 
 // args are key, val
@@ -18,7 +18,7 @@ func SET(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 		return nil, err
 	}
 	fmt.Printf("SET %s %s \n", string(key), val)
-	err = txn.Put(dbi, key, utils.BuildString(0, val), 0)
+	err = txn.Put(dbi, key, dbwrap.BuildString(0, val), 0)
 	if err != nil {
 		return redis.WrapStatus(err.Error()), nil
 	}
@@ -29,11 +29,11 @@ func SET(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 func GETSET(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	key := args[0]
 	newVal := string(args[1])
-	dbi, _, oldVal, err := utils.GetStringForWrite(txn, key)
+	dbi, _, oldVal, err := dbwrap.GetStringForWrite(txn, key)
 	if err != nil {
 		return redis.WrapStatus(err.Error()), nil
 	}
-	err = txn.Put(dbi, key, utils.BuildString(0, newVal), 0)
+	err = txn.Put(dbi, key, dbwrap.BuildString(0, newVal), 0)
 	if err != nil {
 		return redis.WrapStatus(err.Error()), nil
 	}
@@ -44,9 +44,9 @@ func GETSET(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 func SETNX(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	key := args[0]
 	newVal := string(args[1])
-	dbi, _, _, err := utils.GetStringForWrite(txn, key)
+	dbi, _, _, err := dbwrap.GetStringForWrite(txn, key)
 	if err == mdb.NotFound {
-		err = txn.Put(dbi, key, utils.BuildString(0, newVal), 0)
+		err = txn.Put(dbi, key, dbwrap.BuildString(0, newVal), 0)
 		if err != nil {
 			return redis.WrapStatus(err.Error()), nil
 		}
@@ -63,7 +63,7 @@ func SETNX(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	key := args[0]
 	appendVal := string(args[1])
-	dbi, exp, oldVal, err := utils.GetStringForWrite(txn, key)
+	dbi, exp, oldVal, err := dbwrap.GetStringForWrite(txn, key)
 	var newVal string
 	if err == mdb.NotFound {
 		newVal = appendVal
@@ -72,7 +72,7 @@ func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	} else {
 		newVal = oldVal + appendVal
 	}
-	err = txn.Put(dbi, key, utils.BuildString(exp, newVal), 0)
+	err = txn.Put(dbi, key, dbwrap.BuildString(exp, newVal), 0)
 	if err != nil {
 		return redis.WrapStatus(err.Error()), nil
 	}
@@ -81,7 +81,7 @@ func APPEND(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 
 
 func Counter(key []byte, increment int, txn *mdb.Txn) ([]byte, error) {
-	dbi, exp, currentValue, err := utils.GetStringForWrite(txn, key)
+	dbi, exp, currentValue, err := dbwrap.GetStringForWrite(txn, key)
 	if err == mdb.NotFound {
 		currentValue = "0"
 	} else if err != nil {
@@ -93,7 +93,7 @@ func Counter(key []byte, increment int, txn *mdb.Txn) ([]byte, error) {
 
 	newValueInt := currentValueInt + increment
 	newValue := strconv.Itoa(newValueInt)
-	err = txn.Put(dbi, key, utils.BuildString(exp, newValue), 0)
+	err = txn.Put(dbi, key, dbwrap.BuildString(exp, newValue), 0)
 	if err != nil { return redis.WrapStatus(err.Error()), nil }
 
 	return redis.WrapInt(newValueInt), txn.Commit()

@@ -2,7 +2,7 @@ package raftis
 
 import (
 	"testing"
-	utils "github.com/jbooth/raftis/utils"
+	dbwrap "github.com/jbooth/raftis/dbwrap"
 )
 
 
@@ -12,9 +12,9 @@ func TestBuildString(t *testing.T) {
 	var inExpiration uint32 = 123
 	inString := "test123"
 
-	packed := utils.BuildString(inExpiration, inString)
+	packed := dbwrap.BuildString(inExpiration, inString)
 
-	outExpiration, outString, _ := utils.ParseString(packed)
+	outExpiration, outString, _ := dbwrap.ParseString(packed)
 
 	if inExpiration != outExpiration {
 		t.Fatalf("in expiration %s does not match out expiration %s", inExpiration, outExpiration)
