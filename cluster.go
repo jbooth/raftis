@@ -2,8 +2,8 @@ package raftis
 
 import (
 	"fmt"
+	log "github.com/jbooth/raftis/rlog"
 	"io"
-	"log"
 	"sync"
 )
 

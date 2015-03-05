@@ -58,6 +58,7 @@ var (
 )
 
 type Server struct {
+	cluster  *ClusterMember
 	flotilla flotilla.DB
 	redis    *net.TCPListener
 	lg       *log.Logger
@@ -88,7 +89,13 @@ func NewServer(c *ClusterConfig, dataDir string) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	// listen on redis port
+	// connect to cluster
+	cl, err := NewClusterMember(c, lg)
+	if err != nil {
+		return nil, fmt.Errorf("Err connecting to cluster %s", err)
+	}
+
+	// start listening on redis port
 	redisAddr, err := net.ResolveTCPAddr("tcp4", c.Me.RedisAddr)
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't resolve redisAddr %s : %s", c.Me.RedisAddr, err)
@@ -97,7 +104,7 @@ func NewServer(c *ClusterConfig, dataDir string) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", c.Me.RedisAddr, err)
 	}
-	s := &Server{f, redisListen, lg}
+	s := &Server{cl, f, redisListen, lg}
 	return s, nil
 }
 
@@ -119,6 +126,21 @@ func (s *Server) Serve() (err error) {
 }
 
 func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
+	if len(r.Args) > 0 {
+		//hasKey, err := s.cluster.HasKey(r.Args[0])
+		//if err != nil {
+		//return redis.NewError(fmt.Sprintf("error checking key status for key %s : %s", r.Args[0], err))
+		//}
+		//if !hasKey {
+		//// we don't have key locally, forward to correct node
+		//fwd, err := s.cluster.ForwardCommand(r.Name, r.Args)
+		//if err != nil {
+		//return redis.NewError(fmt.Sprintf("Error forwarding command: %s", err.Error()))
+		//}
+		//return fwd
+		//}
+	}
+	// have the key locally, apply command or execute read
 	_, ok := writeOps[r.Name]
 	if ok {
 		return pendingWrite{s.flotilla.Command(r.Name, r.Args)}
