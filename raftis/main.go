@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"github.com/jbooth/raftis"
+  "github.com/jbooth/raftis/config"
 )
 
 var debugLogging bool
 var configfile string
 var dataDir string
-var config raftis.ClusterConfig
+var cfg config.ClusterConfig
 
 func init() {
   flag.StringVar(&configfile, "config", "", "config file")
@@ -23,11 +24,11 @@ func main() {
 		panic("Can't go anywhere without a config file")
   }
 
-  config, err := raftis.ReadConfigFile(configfile)
+  cfg, err := config.ReadConfigFile(configfile)
   if err != nil { panic(err) }
 
 	serve, err := raftis.NewServer(
-    config,
+    cfg,
 		dataDir,
     debugLogging)
 
