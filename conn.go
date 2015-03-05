@@ -3,7 +3,7 @@ package raftis
 import (
 	redis "github.com/jbooth/raftis/redis"
 	"io"
-	"log"
+  rlog "github.com/jbooth/raftis/rlog"
 	"net"
 	"strings"
 )
@@ -42,7 +42,7 @@ func (conn Conn) serveClient(s *Server) (err error) {
 	return nil
 }
 
-func sendResponses(resps chan io.WriterTo, conn net.Conn, lg *log.Logger) {
+func sendResponses(resps chan io.WriterTo, conn net.Conn, lg *rlog.Logger) {
 	defer conn.Close()
 	for r := range resps {
 		n, err := r.WriteTo(conn)

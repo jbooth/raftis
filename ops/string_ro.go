@@ -10,7 +10,6 @@ import (
 // 1 arg, key
 func GET(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 	key := args[0]
-	println("GET " + string(key))
 	val, err := dbwrap.GetString(txn, key)
 	if err == mdb.NotFound {
 		// Not found is nil in redis
@@ -26,7 +25,6 @@ func GET(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 // 1 arg, key
 func STRLEN(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 	key := args[0]
-	println("STRLEN " + string(key))
 	val, err := dbwrap.GetString(txn, key)
 	if err == mdb.NotFound {
 		resp := &redis.IntegerReply{0}

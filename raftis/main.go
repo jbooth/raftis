@@ -34,14 +34,11 @@ func init() {
 }
 
 func main() {
-	fmt.Printf("hi!\n")
 	serve, err := raftis.NewServer(
 		redisAddr,
 		internalAddr,
 		dataDir,
 		peers)
-	if err != nil {
-		panic(err)
-	}
+	if err != nil { panic(err) }
 	serve.Serve()
 }
