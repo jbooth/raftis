@@ -17,7 +17,7 @@ func NewPassThru(remoteHost string) (*PassthruConn, error) {
 		conn,
 		bufio.NewReader(conn),
 		bufio.NewWriter(conn),
-		&sync.Mutex{},
+		new(sync.Mutex),
 	}
 	go ret.routeResponses()
 	return ret, nil
