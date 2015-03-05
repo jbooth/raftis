@@ -47,7 +47,7 @@ script
   export PATH={home_dir}/bin:$$PATH
   # The 'storestream' command reads config using the 'miloconfig' package.
   # We want it to use the same logging configuration as everyone else.
-  exec raftis -r {myaddr}:6379 -i {myaddr}:1103 -d {home_dir}/var/raftis -p {peersaddr}
+  exec raftis -config={home_dir}/etc/raftis.conf -d {home_dir}/var/raftis
 end script"""
 
 
@@ -60,7 +60,7 @@ end script"""
 @hosts(raftis_cluster_hosts())
 def deploy():
   config_file = NamedTemporaryFile()
-  gen_raftis_config(outfile=config_file)
+  gen_raftis_config(env.host_string, outfile=config_file)
 
   config_file.seek(0)
   raftis_cfg = json.load(config_file)
@@ -73,12 +73,8 @@ def deploy():
     ['{}:1103'.format(peer['host'])
       for peer in raftis_cfg['shards'][int(shard)]['hosts']])
 
-  raftis_config_template.format(
-    home_dir=home_dir, myaddr=env.host_string, peersaddr=mypeers)
-
   init_script = NamedTemporaryFile()
-  init_script.write(raftis_config_template.format(
-    home_dir=home_dir, myaddr=env.host_string, peersaddr=mypeers))
+  init_script.write(raftis_config_template.format(home_dir=home_dir))
   init_script.flush()
 
   sudo('mkdir -p {0}/bin {0}/etc {0}/var/raftis'.format(home_dir))
@@ -114,18 +110,22 @@ def install():
   sudo('ln -s /usr/lib/x86_64-linux-gnu/liblmdb.so.0.0.0 /usr/lib/x86_64-linux-gnu/liblmdb.so')
 
 
-def gen_raftis_config(slots=1, outfile=sys.stdout):
+@task
+@hosts('localhost')
+def gen_raftis_config(me, slots="10", outfile=sys.stdout):
+  slots = int(slots)
   nova = Client("1.1", **get_nova_creds())
 
-  hosts = sorted([{'host': host.metadata['fqdn'],
-            'group': host.name.split('-')[2],
-            'shard': int(host.name.split('-')[1])}
-              for host in nova.servers.list()],
+  hosts = sorted([{'RedisAddr': "{}:8369".format(host.metadata['fqdn']),
+                   'FlotillaAddr': "{}:1103".format(host.metadata['fqdn']),
+                   'Group': host.name.split('-')[2],
+                   'shard': int(host.name.split('-')[1])}
+                     for host in nova.servers.list()],
                  key=lambda host: host['shard'])
 
   cnt = Counter()
   for host in hosts:
-      cnt[host['group']] += 1
+      cnt[host['Group']] += 1
 
   if cnt.values().count(cnt.values()[0]) != len(cnt.values()):
       # I actually don't know how to handle fabric errors
@@ -135,16 +135,25 @@ def gen_raftis_config(slots=1, outfile=sys.stdout):
   shards = cnt.values()[0]
 
   shardscfg = [{} for _ in range(shards)]
+  me_host = None 
   for host in hosts:
-    shardscfg[host['shard']].setdefault('hosts', []). append(
-      {'host': host['host'], 'group': host['group']})
+    host_config = {'RedisAddr': host['RedisAddr'],
+       'FlotillaAddr': host['FlotillaAddr'],
+       'Group': host['Group']}
+
+    if me in host['RedisAddr']:
+        me_host = host_config
+
+    shardscfg[host['shard']].setdefault('Hosts', []). append(host_config)
+
     if 'slots' not in shardscfg[host['shard']]:
-        shardscfg[host['shard']]['slots'] = range(
+        shardscfg[host['shard']]['Slots'] = range(
           host['shard'], shards * slots, shards)
 
   raftiscfg = {
     "numSlots": shards * slots,
-    "shards": shardscfg
+    "Shards": shardscfg,
+    "Me": me_host
   }
 
   json.dump(raftiscfg, outfile)
