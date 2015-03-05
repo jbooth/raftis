@@ -22,6 +22,8 @@ func (c *cluster) rclient() *goredis.Redis {
 	return c.clients[(rand.Int() % nclients)]
 }
 
+const debugLogging = true
+
 var testcluster *cluster
 var once sync.Once
 
@@ -97,7 +99,9 @@ func setupTest() {
 					Me:       testcluster.hosts[j],
 					Shards:   shardsForConfig,
 				}
-				testcluster.dbs[j], err = raftis.NewServer(cfg, testcluster.homeDirs[j])
+				testcluster.dbs[j], err = raftis.NewServer(
+          cfg, testcluster.homeDirs[j], debugLogging)
+
 				if err != nil {
 					panic(err)
 				}
