@@ -52,6 +52,8 @@ var (
 		// ttl
 		"EXPIRE": ops.EXPIRE,
 		//EXPIREAT
+		// pseudo lua scripting :)
+		"EVAL": ops.EVAL,
 		// noop is for sync requests
 		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return []byte("+PONG\r\n"), nil },
 	}
@@ -62,10 +64,9 @@ var (
 		"EXISTS": ops.EXISTS,
 		//TYPE
 		// lists
-		"LLEN": ops.LLEN,
-		// LRANGE
+		"LLEN":   ops.LLEN,
+		"LRANGE": ops.LRANGE,
 		// LINDEX
-
 		// hashes
 		"HGET":    ops.HGET,
 		"HMGET":   ops.HMGET,
@@ -92,14 +93,14 @@ type Server struct {
 }
 
 func NewServer(c *ClusterConfig,
-               dataDir string,
-               debugLogging bool) (*Server, error) {
+	dataDir string,
+	debugLogging bool) (*Server, error) {
 
 	lg := log.New(
-    os.Stderr,
-    fmt.Sprintf("Raftis %s:\t", c.Me.RedisAddr),
-    log.LstdFlags,
-    debugLogging)
+		os.Stderr,
+		fmt.Sprintf("Raftis %s:\t", c.Me.RedisAddr),
+		log.LstdFlags,
+		debugLogging)
 
 	// find our replicaset
 	var ours []Host = nil
