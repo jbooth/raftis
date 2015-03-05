@@ -91,8 +91,16 @@ type Server struct {
 	lg       *log.Logger
 }
 
-func NewServer(c *ClusterConfig, dataDir string) (*Server, error) {
-	lg := log.New(os.Stderr, fmt.Sprintf("Raftis %s:\t", c.Me.RedisAddr), log.LstdFlags)
+func NewServer(c *ClusterConfig,
+               dataDir string,
+               debugLogging bool) (*Server, error) {
+
+	lg := log.New(
+    os.Stderr,
+    fmt.Sprintf("Raftis %s:\t", c.Me.RedisAddr),
+    log.LstdFlags,
+    debugLogging)
+
 	// find our replicaset
 	var ours []Host = nil
 	for _, s := range c.Shards {
