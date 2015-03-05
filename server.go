@@ -7,7 +7,7 @@ import (
 	ops "github.com/jbooth/raftis/ops"
 	redis "github.com/jbooth/raftis/redis"
 	"io"
-	"log"
+  log "github.com/jbooth/raftis/rlog"
 	"net"
 	"os"
 )
@@ -23,6 +23,7 @@ var (
 		"SET":      ops.SET,
 		"GETSET":   ops.GETSET,
 		"SETNX":    ops.SETNX,
+		//SETEX
 		"APPEND":   ops.APPEND,
 		"INCR":     ops.INCR,
 		"DECR":     ops.DECR,
@@ -31,29 +32,56 @@ var (
 		"DEL":      ops.DEL,
 		// lists
 		"RPUSH":    ops.RPUSH,
+		// LPUSH
+		// LTRIM
+		// LSET
+		// LREM
+		// LPOP
+		// RPOP
+		// LPUSHX
+		// RPUSHX
+		// BLPOP
+		// BRPOP
 		// hashes
 		"HSET":     ops.HSET,
 		"HMSET":    ops.HMSET,
 		"HINCRBY":  ops.HINCRBY,
 		"HDEL":     ops.HDEL,
+		// sets
+		// SADD
 		// ttl
 		"EXPIRE":   ops.EXPIRE,
+		//EXPIREAT
 		// noop is for sync requests
-		"PING":     func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return redis.WrapString([]byte("PONG!")), nil },
+		"PING":     func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return []byte("+PONG\r\n"), nil },
 	}
 
 	readOps = map[string]readOp{
 		"GET":      ops.GET,
 		"STRLEN":   ops.STRLEN,
 		"EXISTS":   ops.EXISTS,
+		//TYPE
 		// lists
 		"LLEN":   ops.LLEN,
+		// LRANGE
+		// LINDEX
+
 		// hashes
 		"HGET":  ops.HGET,
 		"HMGET":  ops.HMGET,
 		"HGETALL":  ops.HGETALL,
+		// HEXISTS
+		// HLEN
+		// HKEYS
+		// HVALS
+		// sets
+		// SMEMBERS
+		// SCARD
+		// SISMEMBER
+		// SRANDMEMBER
 		// ttl
 		"TTL":   ops.TTL,
+
 	}
 )
 
@@ -78,7 +106,7 @@ func NewServer(redisBind string, flotillaBind string, dataDir string, flotillaPe
 	}
 	redisListen, err := net.ListenTCP("tcp4", redisAddr)
 	if err != nil {
-		return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", redisBind, err)
+    return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", redisBind, err)
 	}
 	s := &Server{f, redisListen, lg}
 	return s, nil
