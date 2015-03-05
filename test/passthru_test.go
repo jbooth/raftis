@@ -26,7 +26,7 @@ func TestPassthru(t *testing.T) {
 	// passthru to a diff host
 	testcluster.clients[1].Ping()
 	fmt.Println("building passthru")
-	passthru, err := raftis.NewPassThru(testcluster.redisAddrs[1])
+	passthru, err := raftis.NewPassThru(testcluster.hosts[1].RedisAddr)
 	keys := []string{"one", "two", "three"}
 	done := make(map[string]chan error)
 	for _, key := range keys {
