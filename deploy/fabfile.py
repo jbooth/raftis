@@ -67,12 +67,6 @@ def deploy():
 
   home_dir = '/opt/raftis'
 
-  _, shard, replica, _ = env.host_string.split('.')[0].split('-')
-
-  mypeers = ','.join(
-    ['{}:1103'.format(peer['host'])
-      for peer in raftis_cfg['shards'][int(shard)]['hosts']])
-
   init_script = NamedTemporaryFile()
   init_script.write(raftis_config_template.format(home_dir=home_dir))
   init_script.flush()
@@ -116,7 +110,7 @@ def gen_raftis_config(me, slots="10", outfile=sys.stdout):
   slots = int(slots)
   nova = Client("1.1", **get_nova_creds())
 
-  hosts = sorted([{'RedisAddr': "{}:8369".format(host.metadata['fqdn']),
+  hosts = sorted([{'RedisAddr': "{}:6379".format(host.metadata['fqdn']),
                    'FlotillaAddr': "{}:1103".format(host.metadata['fqdn']),
                    'Group': host.name.split('-')[2],
                    'shard': int(host.name.split('-')[1])}

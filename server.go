@@ -151,6 +151,7 @@ func (s *Server) Serve() (err error) {
 		s.redis.Close()
 		s.flotilla.Close()
 		s.lg.Printf("server on %s going down: %s", s.redis.Addr().String(), err)
+    return 
 	}(s)
 	for {
 		c, err := s.redis.AcceptTCP()
@@ -172,7 +173,9 @@ func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 
     var buf bytes.Buffer
     config.WriteConfig(s.cluster.c, &buf)
+		return &redis.BulkReply{buf.Bytes()}
   }
+
 	if len(r.Args) > 0 {
 		//hasKey, err := s.cluster.HasKey(r.Args[0])
 		//if err != nil {
