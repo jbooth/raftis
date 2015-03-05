@@ -33,6 +33,9 @@ func (conn Conn) serveClient(s *Server) (err error) {
 		request.Host = conn.RemoteAddr().String()
 		request.Name = strings.ToUpper(request.Name)
 		s.lg.Printf("Got command %s", request.Name)
+		if request.Name == "QUIT" {
+			break
+		}
 
 		// dispatch request
 		response := s.doRequest(conn, request)
