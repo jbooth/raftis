@@ -27,10 +27,10 @@ func RPUSH(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	} else if err != nil {
 		return redis.WrapStatus(err.Error()), nil
 	} else {
-		currentLength, currentMembersList := dbwrap.ExtractLength(rawList)
+		currentLength, currentMembersArray := dbwrap.ExtractLength(rawList)
 		newLength = currentLength + newMembersLength
 		listValue = BuildList(expiration, newLength,
-			dbwrap.AppendMembersToMembersArray(currentMembersList, newMembers))
+			dbwrap.AppendMembersToMembersArray(currentMembersArray, newMembers))
 	}
 	err = txn.Put(dbi, key, listValue, 0)
 	if err != nil {

@@ -2,7 +2,6 @@ package raftis
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/xuyu/goredis"
 	"strings"
 	"testing"
@@ -50,7 +49,6 @@ func TestRPushAndLLen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Printf("LLEN is %d", llen)
 	if llen != 3 {
 		t.Fatalf("Expecting list to contain 3 elements, but got %d", llen)
 	}

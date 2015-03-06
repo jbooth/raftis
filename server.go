@@ -51,7 +51,7 @@ var (
 		"HINCRBY": ops.HINCRBY,
 		"HDEL":    ops.HDEL,
 		// sets
-		// SADD
+		"SADD": ops.SADD,
 		// ttl
 		"EXPIRE": ops.EXPIRE,
 		//EXPIREAT
@@ -79,8 +79,8 @@ var (
 		// HKEYS
 		// HVALS
 		// sets
-		// SMEMBERS
-		// SCARD
+		//		"SMEMBERS": ops.SMEMBERS,
+		"SCARD": ops.SCARD,
 		// SISMEMBER
 		// SRANDMEMBER
 		// ttl
