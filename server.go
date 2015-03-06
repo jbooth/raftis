@@ -2,13 +2,14 @@ package raftis
 
 import (
 	"fmt"
-  "bytes"
+	"bytes"
+	"strings"
 	"github.com/jbooth/flotilla"
 	mdb "github.com/jbooth/gomdb"
 	ops "github.com/jbooth/raftis/ops"
 	redis "github.com/jbooth/raftis/redis"
 	log "github.com/jbooth/raftis/rlog"
-  config "github.com/jbooth/raftis/config"
+	config "github.com/jbooth/raftis/config"
 	"io"
 	"net"
 	"os"
@@ -151,7 +152,7 @@ func (s *Server) Serve() (err error) {
 		s.redis.Close()
 		s.flotilla.Close()
 		s.lg.Printf("server on %s going down: %s", s.redis.Addr().String(), err)
-    return 
+		return
 	}(s)
 	for {
 		c, err := s.redis.AcceptTCP()
@@ -167,14 +168,24 @@ func (s *Server) Serve() (err error) {
 var get []byte = []byte("GET")
 func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 
-  if r.Name == "CONFIG" &&
-     bytes.Equal(r.Args[0], []byte("GET")) &&
-     bytes.Equal(r.Args[1], []byte("cluster")) {
-
-    var buf bytes.Buffer
-    config.WriteConfig(s.cluster.c, &buf)
-		return &redis.BulkReply{buf.Bytes()}
-  }
+	if r.Name == "CONFIG" &&
+		len(r.Args) > 0 &&
+		strings.ToUpper(string(r.Args[0])) == "GET" {
+		var resp redis.ReplyWriter
+		if len(r.Args) == 1 {
+			resp = redis.NewError("ERR Wrong number of arguments for CONFIG GET")
+		} else {
+			ret := make([][]byte, 0)
+			if bytes.Equal(r.Args[1], []byte("cluster")) {
+				var buf bytes.Buffer
+				config.WriteConfig(s.cluster.c, &buf)
+				ret = append(ret, []byte("cluster"))
+				ret = append(ret, buf.Bytes())
+			}
+			resp = &redis.ArrayReply{ret}
+		}
+		return resp
+	}
 
 	if len(r.Args) > 0 {
 		//hasKey, err := s.cluster.HasKey(r.Args[0])

@@ -7,20 +7,20 @@ import (
 )
 
 type ClusterConfig struct {
-	NumSlots uint32
-	Me       Host // should match a host in one of our shards exactly to identify which peergroup we join
-	Shards   []Shard
+	NumSlots uint32  `json:"numSlots"`
+	Me       Host    `json:"me"` // should match a host in one of our shards exactly to identify which peergroup we join
+	Shards   []Shard `json:"shards"`
 }
 
 type Shard struct {
-	Slots []uint32
-	Hosts []Host
+	Slots []uint32  `json:"slots"`
+	Hosts []Host    `json:"hosts"`
 }
 
 type Host struct {
-	RedisAddr    string // "192.168.0.4:8369"
-	FlotillaAddr string // "192.168.0.4:1103"
-	Group        string
+	RedisAddr    string  `json:"redisAddr"`     // "192.168.0.4:8369"
+	FlotillaAddr string  `json:"flotillaAddr"`  // "192.168.0.4:1103"
+	Group        string  `json:"group"`
 }
 
 func WriteConfig(c *ClusterConfig, w io.Writer) error {
