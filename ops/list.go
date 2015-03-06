@@ -11,8 +11,12 @@ func BuildList(expiration uint32, length uint32, membersList []byte) []byte {
 	return dbwrap.BuildRawValue(expiration, dbwrap.LIST, dbwrap.BuildRawArray0(length, membersList))
 }
 
+// args: key string1, [string2 ...]
 func RPUSH(args [][]byte, txn *mdb.Txn) ([]byte, error) {
-	//todo: check args ,if not enough return "ERR wrong number of arguments for 'rpush' command"
+	if err := checkAtLeastArgs(args, 2, "rpush"); err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	}
+
 	key := args[0]
 	newMembers := args[1:]
 	println("RPUSH", string(key), string(bytes.Join(newMembers, []byte(" "))))
@@ -27,10 +31,10 @@ func RPUSH(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	} else if err != nil {
 		return redis.WrapStatus(err.Error()), nil
 	} else {
-		currentLength, currentMembersList := dbwrap.ExtractLength(rawList)
+		currentLength, currentMembersArray := dbwrap.ExtractLength(rawList)
 		newLength = currentLength + newMembersLength
 		listValue = BuildList(expiration, newLength,
-			dbwrap.AppendMembersToMembersArray(currentMembersList, newMembers))
+			dbwrap.AppendMembersToMembersArray(currentMembersArray, newMembers))
 	}
 	err = txn.Put(dbi, key, listValue, 0)
 	if err != nil {
@@ -42,8 +46,11 @@ func RPUSH(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 //=============================================================
 //custom commands supported via EVAL
 
+// args: key start end
 func LPOPRANGE(args [][]byte, txn *mdb.Txn) ([]byte, error) {
-	//todo: check args ,if not enough return "ERR wrong number of arguments for 'rpush' command"
+	if err := checkExactArgs(args, 3, "lpoprange"); err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	}
 
 	println("LPOPRANGE", string(bytes.Join(args, []byte(" "))))
 	key := args[0]

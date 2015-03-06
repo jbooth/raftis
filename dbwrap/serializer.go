@@ -84,3 +84,23 @@ func MapToMembers(m map[string]string) [][]byte {
 	}
 	return members
 }
+
+func MembersToSet(members [][]byte) (map[string]struct{}, int) {
+	return AddMembersToSet(make(map[string]struct{}), members)
+}
+
+func AddMembersToSet(set map[string]struct{}, newMembers [][]byte) (map[string]struct{}, int) {
+	originalLength := len(set)
+	for i := 0; i < len(newMembers); i++ {
+		set[string(newMembers[i])] = struct{}{}
+	}
+	return set, len(set) - originalLength
+}
+
+func SetToMembers(s map[string]struct{}) [][]byte {
+	members := make([][]byte, 0)
+	for k, _ := range s {
+		members = append(members, []byte(k))
+	}
+	return members
+}

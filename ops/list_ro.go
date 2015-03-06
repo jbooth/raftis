@@ -8,8 +8,11 @@ import (
 	"strconv"
 )
 
+// args: key
 func LLEN(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
-	//todo: check args ,if not enough return "ERR wrong number of arguments for 'rpush' command"
+	if err := checkExactArgs(args, 1, "llen"); err != nil {
+		return redis.NewError(err.Error()).WriteTo(w)
+	}
 
 	key := args[0]
 	println("LLEN", string(key))
@@ -35,8 +38,11 @@ func toIntArg(raw []byte) (int, error) {
 	return strconv.Atoi(string(raw))
 }
 
+// args: key start end
 func LRANGE(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
-	//todo: check args ,if not enough or too much return "ERR wrong number of arguments for 'LRANGE' command"
+	if err := checkExactArgs(args, 3, "lrange"); err != nil {
+		return redis.NewError(err.Error()).WriteTo(w)
+	}
 
 	key := args[0]
 	start, err := toIntArg(args[1])

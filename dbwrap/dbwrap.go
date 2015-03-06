@@ -3,8 +3,8 @@ package dbwrap
 import (
 	"encoding/binary"
 	"errors"
-	"time"
 	mdb "github.com/jbooth/gomdb"
+	"time"
 )
 
 const (
@@ -23,28 +23,32 @@ func ParseRawValue(rawVal []byte) (uint32, uint8, []byte) {
 	return expiration, type_, val
 }
 
-func ParseString(rawVal []byte) (uint32, []byte, error) {
+func parseWithType(rawVal []byte, expectedType uint8) (uint32, []byte, error) {
 	expiration, type_, val := ParseRawValue(rawVal)
-	if type_ != STRING {
+	if type_ != expectedType {
 		return 0, nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
 	return expiration, val, nil
 }
 
+func ParseString(rawVal []byte) (uint32, []byte, error) {
+	return parseWithType(rawVal, STRING)
+}
+
 func ParseHash(rawVal []byte) (uint32, [][]byte, error) {
-	expiration, type_, val :=  ParseRawValue(rawVal)
-	if type_ != HASH {
-		return 0, nil, errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+	expiration, val, err := parseWithType(rawVal, HASH)
+	if err != nil {
+		return expiration, nil, err
 	}
 	return expiration, RawArrayToMembers(val), nil
 }
 
 func ParseList(rawVal []byte) (uint32, []byte, error) {
-	expiration, type_, val := ParseRawValue([]byte(rawVal))
-	if type_ != LIST {
-		return 0, nil, errors.New("type mismatch")
-	}
-	return expiration, val, nil
+	return parseWithType(rawVal, LIST)
+}
+
+func ParseSet(rawVal []byte) (uint32, []byte, error) {
+	return parseWithType(rawVal, SET)
 }
 
 // build
@@ -201,6 +205,36 @@ func GetRawListForWrite(txn *mdb.Txn, key []byte) (mdb.DBI, uint32, []byte, erro
 		return dbi, 0, nil, err
 	}
 	expiration, val, err := ParseList(rawVal)
+	if err != nil {
+		return dbi, 0, nil, err
+	}
+	if Expired(expiration) {
+		return dbi, 0, nil, mdb.NotFound
+	}
+	return dbi, expiration, val, nil
+}
+
+func GetRawSet(txn *mdb.Txn, key []byte) ([]byte, error) {
+	_, rawVal, err := GetBytes(txn, key, 0)
+	if err != nil {
+		return nil, err
+	}
+	expiration, val, err := ParseSet(rawVal)
+	if err != nil {
+		return nil, err
+	}
+	if Expired(expiration) {
+		return nil, mdb.NotFound
+	}
+	return val, nil
+}
+
+func GetRawSetForWrite(txn *mdb.Txn, key []byte) (mdb.DBI, uint32, []byte, error) {
+	dbi, rawVal, err := GetBytes(txn, key, mdb.CREATE)
+	if err != nil {
+		return dbi, 0, nil, err
+	}
+	expiration, val, err := ParseSet(rawVal)
 	if err != nil {
 		return dbi, 0, nil, err
 	}

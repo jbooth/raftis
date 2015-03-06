@@ -6,7 +6,12 @@ import (
 	"io"
 )
 
+// args: key
 func EXISTS(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
+	if err := checkExactArgs(args, 1, "exists"); err != nil {
+		return redis.NewError(err.Error()).WriteTo(w)
+	}
+
 	key := args[0]
 	table := "onlyTable"
 	println("EXISTS " + string(key))
