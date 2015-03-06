@@ -2,11 +2,13 @@ package raftis
 
 import (
 	"fmt"
+  "bytes"
 	"github.com/jbooth/flotilla"
 	mdb "github.com/jbooth/gomdb"
 	ops "github.com/jbooth/raftis/ops"
 	redis "github.com/jbooth/raftis/redis"
 	log "github.com/jbooth/raftis/rlog"
+  config "github.com/jbooth/raftis/config"
 	"io"
 	"net"
 	"os"
@@ -92,9 +94,9 @@ type Server struct {
 	lg       *log.Logger
 }
 
-func NewServer(c *ClusterConfig,
-	dataDir string,
-	debugLogging bool) (*Server, error) {
+func NewServer(c *config.ClusterConfig,
+               dataDir string,
+               debugLogging bool) (*Server, error) {
 
 	lg := log.New(
 		os.Stderr,
@@ -103,7 +105,7 @@ func NewServer(c *ClusterConfig,
 		debugLogging)
 
 	// find our replicaset
-	var ours []Host = nil
+	var ours []config.Host = nil
 	for _, s := range c.Shards {
 		for _, h := range s.Hosts {
 			if h.RedisAddr == c.Me.RedisAddr && h.FlotillaAddr == c.Me.FlotillaAddr {
@@ -149,6 +151,7 @@ func (s *Server) Serve() (err error) {
 		s.redis.Close()
 		s.flotilla.Close()
 		s.lg.Printf("server on %s going down: %s", s.redis.Addr().String(), err)
+    return 
 	}(s)
 	for {
 		c, err := s.redis.AcceptTCP()
@@ -161,7 +164,18 @@ func (s *Server) Serve() (err error) {
 	}
 }
 
+var get []byte = []byte("GET")
 func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
+
+  if r.Name == "CONFIG" &&
+     bytes.Equal(r.Args[0], []byte("GET")) &&
+     bytes.Equal(r.Args[1], []byte("cluster")) {
+
+    var buf bytes.Buffer
+    config.WriteConfig(s.cluster.c, &buf)
+		return &redis.BulkReply{buf.Bytes()}
+  }
+
 	if len(r.Args) > 0 {
 		//hasKey, err := s.cluster.HasKey(r.Args[0])
 		//if err != nil {

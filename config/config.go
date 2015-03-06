@@ -1,4 +1,4 @@
-package raftis
+package config
 
 import (
 	"encoding/json"
