@@ -8,8 +8,12 @@ import (
 )
 
 // WRITES
-// args: key member1 member2 ...
+// args: key member1 [member2 ...]
 func SADD(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+	if err := checkAtLeastArgs(args, 2, "sadd"); err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	}
+
 	key := args[0]
 	newMembersArray := args[1:]
 	println("SADD", string(key), string(bytes.Join(newMembersArray, []byte(" "))))

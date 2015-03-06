@@ -1,18 +1,19 @@
 package ops
 
 import (
+	"bytes"
 	mdb "github.com/jbooth/gomdb"
 	redis "github.com/jbooth/raftis/redis"
 )
 
+// args: key1, [key2 ...]
 func DEL(args [][]byte, txn *mdb.Txn) ([]byte, error) {
-	table := "onlyTable"
-	// there must be a better way to print a slice :)
-	print("DEL")
-	for _, k := range args {
-		print(" ", string(k))
+	if err := checkAtLeastArgs(args, 1, "del"); err != nil {
+		return redis.WrapStatus(err.Error()), nil
 	}
-	println("")
+
+	table := "onlyTable"
+	println("DEL ", bytes.Join(args, []byte(" ")))
 
 	dbi, err := txn.DBIOpen(&table, mdb.CREATE)
 	if err != nil {

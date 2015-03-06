@@ -9,8 +9,8 @@ import (
 
 // args: key
 func SCARD(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
-	if len(args) != 1 {
-		return redis.NewError("ERR wrong number of arguments for 'scard' command").WriteTo(w)
+	if err := checkExactArgs(args, 1, "scard"); err != nil {
+		return redis.NewError(err.Error()).WriteTo(w)
 	}
 	key := args[0]
 	println("SCARD", string(key))
