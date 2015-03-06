@@ -1,98 +1,90 @@
 package ops
 
 import (
-	binary "encoding/binary"
+	"bytes"
 	mdb "github.com/jbooth/gomdb"
 	dbwrap "github.com/jbooth/raftis/dbwrap"
 	redis "github.com/jbooth/raftis/redis"
 )
 
-//
-// Members 		[][]byte
-// MembersList 	[]byte  = len(m1) + m1 ... len(mn) + mn
-// RawList 		[]byte = len(n) + MembersList(n)
-// RawListValue []byte = ttl + LIST type + RawList
-//
-// todo: add structs to be more explicit about types above
-
-func MembersToMembersList(members [][]byte) []byte {
-	return AppendMembersToMembersList(nil, members)
-}
-
-func MembersListToMembers(n int, membersList []byte) [][]byte {
-	members := make([][]byte, n)
-	for i := 0; i < n; i++ {
-		l, rest := ExtractLength(membersList)
-		members[i] = rest[:l]
-		membersList = rest[l:]
-	}
-	return members
-}
-
-func AppendMembersToMembersList(membersList []byte, members [][]byte) []byte {
-	for _, member := range members {
-		membersList = append(membersList, withLength(member)...)
-	}
-	return membersList
-}
-
-func BuildRawListValue(expiration uint32, length uint32, membersList []byte) []byte {
-	return dbwrap.BuildRawValue(expiration, dbwrap.LIST, BuildRawList(length, membersList))
-}
-
-func BuildRawList(length uint32, membersList []byte) []byte {
-	return prependLength(length, membersList)
-}
-
-// prepends length of val ot val
-func withLength(val []byte) []byte {
-	return prependLength(uint32(len(val)), val)
-}
-
-//prepends 4 bytes with l in them to prependTo
-func prependLength(l uint32, prependTo []byte) []byte {
-	return append(lengthInBytes(l), prependTo...)
-}
-
-// takes first 4 bytes
-func ExtractLength(withLength []byte) (uint32, []byte) {
-	length := binary.LittleEndian.Uint32(withLength[:4])
-	return length, withLength[4:]
-}
-
-// converts uint to 4 bytes
-func lengthInBytes(l uint32) []byte {
-	lengthSpace := make([]byte, 4)
-	binary.LittleEndian.PutUint32(lengthSpace, uint32(l))
-	return lengthSpace
+func BuildList(expiration uint32, length uint32, membersList []byte) []byte {
+	return dbwrap.BuildRawValue(expiration, dbwrap.LIST, dbwrap.BuildRawArray0(length, membersList))
 }
 
 func RPUSH(args [][]byte, txn *mdb.Txn) ([]byte, error) {
 	//todo: check args ,if not enough return "ERR wrong number of arguments for 'rpush' command"
 	key := args[0]
 	newMembers := args[1:]
+	println("RPUSH", string(key), string(bytes.Join(newMembers, []byte(" "))))
 
 	newMembersLength := uint32(len(newMembers))
 	var listValue []byte
 	var newLength uint32
 	dbi, expiration, rawList, err := dbwrap.GetRawListForWrite(txn, key)
 	if err == mdb.NotFound {
-
-		membersList := MembersToMembersList(newMembers)
-		// must be -1 instead of 0, uint32 is the cause
 		newLength = newMembersLength
-		listValue = BuildRawListValue(0, newMembersLength, membersList)
+		listValue = dbwrap.BuildList(0, newMembers)
 	} else if err != nil {
 		return redis.WrapStatus(err.Error()), nil
 	} else {
-		currentLength, currentMembersList := ExtractLength(rawList)
+		currentLength, currentMembersList := dbwrap.ExtractLength(rawList)
 		newLength = currentLength + newMembersLength
-		listValue = BuildRawListValue(expiration, newLength,
-			AppendMembersToMembersList(currentMembersList, newMembers))
+		listValue = BuildList(expiration, newLength,
+			dbwrap.AppendMembersToMembersArray(currentMembersList, newMembers))
 	}
 	err = txn.Put(dbi, key, listValue, 0)
 	if err != nil {
 		return redis.WrapStatus(err.Error()), nil
 	}
 	return redis.WrapInt(int(newLength)), txn.Commit()
+}
+
+//=============================================================
+//custom commands supported via EVAL
+
+func LPOPRANGE(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+	//todo: check args ,if not enough return "ERR wrong number of arguments for 'rpush' command"
+
+	println("LPOPRANGE", string(bytes.Join(args, []byte(" "))))
+	key := args[0]
+	start, err := toIntArg(args[1])
+	if err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	}
+	end, err := toIntArg(args[2])
+	if err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	}
+
+	if start > end || start < 0 {
+		return redis.WrapArray(nil), txn.Commit()
+	}
+
+	dbi, expiration, rawList, err := dbwrap.GetRawListForWrite(txn, key)
+	if err == mdb.NotFound {
+		return redis.WrapArray(nil), txn.Commit()
+	} else if err != nil {
+		return redis.WrapStatus(err.Error()), nil
+	} else {
+		length, membersList := dbwrap.ExtractLength(rawList)
+		members := dbwrap.MembersArrayToMembers(length, membersList)
+		if end > int(length) {
+			end = int(length)
+		} else {
+			end++
+		}
+		membersRange := make([][]byte, end-start)
+		copy(membersRange, members[start:end])
+
+		newMembers := append(members[:start], members[end:]...)
+
+		listValue := dbwrap.BuildList(expiration, newMembers)
+
+		err = txn.Put(dbi, key, listValue, 0)
+
+		if err != nil {
+			return redis.WrapStatus(err.Error()), nil
+		}
+		return redis.WrapArray(membersRange), txn.Commit()
+	}
 }

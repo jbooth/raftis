@@ -94,6 +94,8 @@ func (r *ArrayReply) WriteTo(w io.Writer) (int64, error) {
 	return writeBytes(r.Value, w)
 }
 
+var NilArrayReply ArrayReply = ArrayReply{nil}
+
 var NilReply BulkReply = BulkReply{nil}
 
 type MonitorReply struct {

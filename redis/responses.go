@@ -13,6 +13,14 @@ func WrapInt(v int) []byte {
 	return []byte(":" + strconv.Itoa(v) + "\r\n")
 }
 
+func WrapArray(arr [][]byte) []byte {
+	ret := []byte("*" + strconv.Itoa(len(arr)) + "\r\n")
+	for _, v := range arr {
+		ret = append(ret, WrapString(v)...)
+	}
+	return ret
+}
+
 func WrapString(vs []byte) []byte {
 	v := []byte(vs)
 	if len(v) == 0 {
