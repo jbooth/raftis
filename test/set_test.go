@@ -1,6 +1,8 @@
 package raftis
 
 import (
+	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -69,4 +71,35 @@ func TestSADDAndSCARD(t *testing.T) {
 		t.Fatalf("Expecting list to contain 3 elements, but got %d", scard)
 	}
 
+}
+
+func TestSMembers(t *testing.T) {
+	setupTest()
+
+	client := testcluster.clients[0]
+
+	members, err := client.SMembers("smembers_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if members != nil {
+		t.Fatalf("SMEMBERS for non-existing key must return nil, got %s", members)
+	}
+
+	_, err = client.SAdd("smembers_test", "a", "b", "c")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	members, err = client.SMembers("smembers_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(members)
+
+	expected := []string{"a", "b", "c"}
+
+	if !reflect.DeepEqual(expected, members) {
+		t.Fatalf("Expected members %s do not match actual members %s", expected, members)
+	}
 }

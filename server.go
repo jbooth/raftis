@@ -79,8 +79,8 @@ var (
 		// HKEYS
 		// HVALS
 		// sets
-		//		"SMEMBERS": ops.SMEMBERS,
-		"SCARD": ops.SCARD,
+		"SMEMBERS": ops.SMEMBERS,
+		"SCARD":    ops.SCARD,
 		// SISMEMBER
 		// SRANDMEMBER
 		// ttl

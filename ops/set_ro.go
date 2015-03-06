@@ -30,3 +30,29 @@ func SCARD(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 	// write result
 	return resp.WriteTo(w)
 }
+
+// args: key
+func SMEMBERS(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
+	if err := checkExactArgs(args, 1, "smembers"); err != nil {
+		return redis.NewError(err.Error()).WriteTo(w)
+	}
+
+	key := args[0]
+	println("SMEMBERS", string(key))
+
+	var resp redis.ReplyWriter
+
+	rawSet, err := dbwrap.GetRawSet(txn, key)
+	if err == mdb.NotFound {
+		// Redis returns 0 for non-existing key
+		return redis.NilArrayReply.WriteTo(w)
+	} else if err != nil {
+		// write error
+		resp = redis.NewError(err.Error())
+	} else {
+		members := dbwrap.RawArrayToMembers(rawSet)
+		resp = &redis.ArrayReply{members}
+	}
+	// write result
+	return resp.WriteTo(w)
+}
