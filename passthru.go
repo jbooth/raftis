@@ -2,6 +2,7 @@ package raftis
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"strconv"
 	"sync"
@@ -66,7 +67,7 @@ func (p *PassthruConn) routeResponses() {
 			resp <- PassthruResp{nil, err}
 			break //
 		}
-		//fmt.Printf("got response line: %s\n", string(line))
+		fmt.Printf("got response line: %s\n", string(line))
 		// forward on along
 		resp <- PassthruResp{line, nil}
 	}

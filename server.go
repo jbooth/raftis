@@ -154,18 +154,19 @@ func (s *Server) Serve() (err error) {
 
 func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 	if len(r.Args) > 0 {
-		//hasKey, err := s.cluster.HasKey(r.Args[0])
-		//if err != nil {
-		//return redis.NewError(fmt.Sprintf("error checking key status for key %s : %s", r.Args[0], err))
-		//}
-		//if !hasKey {
-		//// we don't have key locally, forward to correct node
-		//fwd, err := s.cluster.ForwardCommand(r.Name, r.Args)
-		//if err != nil {
-		//return redis.NewError(fmt.Sprintf("Error forwarding command: %s", err.Error()))
-		//}
-		//return fwd
-		//}
+		hasKey, err := s.cluster.HasKey(r.Args[0])
+		s.lg.Printf("Local for key %s ? %s", r.Args[0], hasKey)
+		if err != nil {
+			return redis.NewError(fmt.Sprintf("error checking key status for key %s : %s", r.Args[0], err))
+		}
+		if !hasKey {
+			// we don't have key locally, forward to correct node
+			fwd, err := s.cluster.ForwardCommand(r.Name, r.Args)
+			if err != nil {
+				return redis.NewError(fmt.Sprintf("Error forwarding command: %s", err.Error()))
+			}
+			return fwd
+		}
 	}
 	// have the key locally, apply command or execute read
 	_, ok := writeOps[r.Name]
