@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"fmt"
 	mdb "github.com/jbooth/gomdb"
 	dbwrap "github.com/jbooth/raftis/dbwrap"
 	redis "github.com/jbooth/raftis/redis"
@@ -22,6 +23,7 @@ func GET(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error) {
 		// write error
 		return redis.NewError(err.Error()).WriteTo(w)
 	}
+	fmt.Printf("GET sending allegedly valid response\n")
 	resp := &redis.BulkReply{val}
 	return resp.WriteTo(w)
 }

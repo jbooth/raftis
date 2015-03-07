@@ -2,10 +2,10 @@ package raftis
 
 import (
 	"fmt"
+	"github.com/jbooth/raftis/config"
 	log "github.com/jbooth/raftis/rlog"
 	"io"
 	"sync"
-  "github.com/jbooth/raftis/config"
 )
 
 func NewClusterMember(c *config.ClusterConfig, lg *log.Logger) (*ClusterMember, error) {
@@ -53,20 +53,11 @@ func (c *ClusterMember) ForwardCommand(cmdName string, args [][]byte) (io.Writer
 	if len(args) == 0 {
 		return nil, fmt.Errorf("Can't forward command %s, need at least 1 arg for key!", cmdName)
 	}
-	slot := c.slotForKey(args[0])
-	hosts, ok := c.slotHosts[slot]
-	if !ok || len(hosts) == 0 {
-		return nil, fmt.Errorf("No host for slot %d, key %s!", slot, string(args[0]))
-	}
 	conn, err := c.getConnForKey(args[0])
 	if err != nil {
 		return nil, err
 	}
-	pending, err := conn.Command(cmdName, args)
-	if err != nil {
-		return nil, fmt.Errorf("Error forwarding command %s to host %s : %s", cmdName, hosts[0].RedisAddr, err.Error())
-	}
-	return &Forward{pending}, nil
+	return conn.Command(cmdName, args)
 }
 
 func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
@@ -77,7 +68,7 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 	if !ok {
 		return nil, fmt.Errorf("No hosts configured for slot %d from key %s", slot, key)
 	}
-	hostsByGroup := make(map[string]Host)
+	hostsByGroup := make(map[string]config.Host)
 	for _, host := range hosts {
 		if host.RedisAddr == c.c.Me.RedisAddr {
 			return nil, fmt.Errorf("Can't passthru to localhost!  Use the right interface.")
@@ -138,21 +129,6 @@ func (c *ClusterMember) getConnForHost(host string) (*PassthruConn, error) {
 		fmt.Printf("Err connecting to host %s : %s", host, err)
 		return nil, err
 	}
-}
-
-type Forward struct {
-	pending <-chan PassthruResp
-}
-
-func (f *Forward) WriteTo(w io.Writer) (int64, error) {
-	fmt.Printf("Executing forwarded cmd\n")
-	resp := <-f.pending
-	if resp.Err != nil {
-		return 0, resp.Err
-	}
-	ret1, ret2 := w.Write(resp.Data)
-	fmt.Printf("Executed forwarded cmd\n")
-	return int64(ret1), ret2
 }
 
 func (c *ClusterMember) slotForKey(key []byte) int32 {

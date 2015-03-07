@@ -1,18 +1,18 @@
 package raftis
 
 import (
-	"fmt"
 	"bytes"
-	"strings"
+	"fmt"
 	"github.com/jbooth/flotilla"
 	mdb "github.com/jbooth/gomdb"
+	config "github.com/jbooth/raftis/config"
 	ops "github.com/jbooth/raftis/ops"
 	redis "github.com/jbooth/raftis/redis"
 	log "github.com/jbooth/raftis/rlog"
-	config "github.com/jbooth/raftis/config"
 	"io"
 	"net"
 	"os"
+	"strings"
 )
 
 // writes a valid redis protocol response to the supplied Writer, returning bytes written, err
@@ -96,8 +96,8 @@ type Server struct {
 }
 
 func NewServer(c *config.ClusterConfig,
-               dataDir string,
-               debugLogging bool) (*Server, error) {
+	dataDir string,
+	debugLogging bool) (*Server, error) {
 
 	lg := log.New(
 		os.Stderr,
@@ -166,6 +166,7 @@ func (s *Server) Serve() (err error) {
 }
 
 var get []byte = []byte("GET")
+
 func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 
 	if r.Name == "CONFIG" &&
@@ -189,11 +190,12 @@ func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 
 	if len(r.Args) > 0 {
 		hasKey, err := s.cluster.HasKey(r.Args[0])
-		s.lg.Printf("Local for key %s ? %s", r.Args[0], hasKey)
 		if err != nil {
+			s.lg.Errorf("error checking key status for key %s : %s", r.Args[0], err)
 			return redis.NewError(fmt.Sprintf("error checking key status for key %s : %s", r.Args[0], err))
 		}
 		if !hasKey {
+			s.lg.Printf("Not local for key %s , forwarding\n", string(r.Args[0]))
 			// we don't have key locally, forward to correct node
 			fwd, err := s.cluster.ForwardCommand(r.Name, r.Args)
 			if err != nil {
@@ -201,6 +203,7 @@ func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 			}
 			return fwd
 		}
+		s.lg.Printf("Local for key %s, processing\n", string(r.Args[0]))
 	}
 	// have the key locally, apply command or execute read
 	_, ok := writeOps[r.Name]
@@ -209,6 +212,7 @@ func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 	}
 	readOp, ok := readOps[r.Name]
 	if ok {
+		fmt.Printf("Got read op %s\n", r.Name)
 		r := pendingRead{readOp, r.Args, s}
 		if c.syncRead {
 			return pendingSyncRead{s.flotilla.Command("NOOP", emptyArgs), r}

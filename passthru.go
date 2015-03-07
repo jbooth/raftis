@@ -3,6 +3,7 @@ package raftis
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"sync"
@@ -14,7 +15,7 @@ func NewPassThru(remoteHost string) (*PassthruConn, error) {
 		return nil, err
 	}
 	ret := &PassthruConn{
-		make(chan chan PassthruResp),
+		make(chan *PassthruResp),
 		conn,
 		bufio.NewReader(conn),
 		bufio.NewWriter(conn),
@@ -29,21 +30,16 @@ func NewPassThru(remoteHost string) (*PassthruConn, error) {
 // will yield a single response of []byte,error (naively scanned until first '\n')
 // does not support multiline responses yet
 type PassthruConn struct {
-	pendingResp    chan chan PassthruResp
+	pendingResp    chan *PassthruResp
 	underlyingConn net.Conn
 	bufIn          *bufio.Reader
 	bufOut         *bufio.Writer
 	l              *sync.Mutex
 }
 
-type PassthruResp struct {
-	Data []byte
-	Err  error
-}
-
 var crlf = []byte{byte('\r'), byte('\n')}
 
-func (p *PassthruConn) Command(cmd string, args [][]byte) (<-chan PassthruResp, error) {
+func (p *PassthruConn) Command(cmd string, args [][]byte) (*PassthruResp, error) {
 	p.l.Lock()
 	defer p.l.Unlock()
 
@@ -53,29 +49,32 @@ func (p *PassthruConn) Command(cmd string, args [][]byte) (<-chan PassthruResp, 
 	}
 
 	// flush command, register receive chan
-	receiver := make(chan PassthruResp, 1)
-	p.pendingResp <- receiver
-	return receiver, nil
+
+	ready := make(chan error, 1)
+	done := make(chan error, 1)
+	resp := &PassthruResp{ready, done, p}
+	fmt.Printf("Dispatched command, queuing resp\n")
+	p.pendingResp <- resp
+	return resp, nil
 }
 
 func (p *PassthruConn) routeResponses() {
-	var err error
+	defer p.underlyingConn.Close()
+	var err error = nil
+	// we iterate in a loop, signaling ready on one chan then blocking till done on the other
+	// actual pipelining of responses is done by the goroutine invoking WriteTo() on PassthruResp to send to the actual client,
 	for resp := range p.pendingResp {
-		// read from sock
-		line, err := p.bufIn.ReadBytes('\n')
+		fmt.Printf("routeResponses Signaling ready to cmd, errstate: %s", err)
+
+		//signal ready
+		resp.ready <- err
+		// wait done
+		fmt.Printf("routeResponses waiting cmd done, errstate: %s", err)
+		err = <-resp.done
+		fmt.Printf("routeResponses cmd finished, errstate: %s", err)
 		if err != nil {
-			resp <- PassthruResp{nil, err}
-			break //
-		}
-		fmt.Printf("got response line: %s\n", string(line))
-		// forward on along
-		resp <- PassthruResp{line, nil}
-	}
-	if err != nil {
-		p.underlyingConn.Close()
-		//repeat error to all pending responses
-		for resp := range p.pendingResp {
-			resp <- PassthruResp{nil, err}
+			p.underlyingConn.Close()
+			close(p.pendingResp)
 		}
 	}
 }
@@ -149,4 +148,110 @@ func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
 	}
 	return out.Flush()
 
+}
+
+type inAndErr struct {
+	in  *bufio.Reader
+	err error
+}
+type PassthruResp struct {
+	ready chan error
+	done  chan error
+	p     *PassthruConn
+}
+
+// Forwards a remote command to a client.
+func (p *PassthruResp) WriteTo(w io.Writer) (int64, error) {
+	// wait till our turn
+	fmt.Printf("passthruResp waiting our turn to read\n")
+	err := <-p.ready
+	if err != nil {
+		fmt.Printf("passthru ERR! %s\n", err)
+		p.done <- err
+		return 0, err
+	}
+	fmt.Printf("passthruResp working \n")
+	// forward it along
+	written, err := forwardResponse(p.p.bufIn, w)
+	// signal done
+	fmt.Printf("passthruResp signaling done, errstate %s \n", err)
+	p.done <- err
+	return int64(written), err
+}
+
+func forwardResponse(in *bufio.Reader, out io.Writer) (int, error) {
+	fmt.Printf("forwardResponse reading first byte\n")
+	// read first byte
+	respType, err := in.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	fmt.Printf("forwardResponse got response type %s forwarding first byte \n", string(respType))
+	// forward first byte
+	written, err := out.Write([]byte{respType})
+	if err != nil {
+		return written, err
+	}
+	// send rest of message
+	if respType == '+' || respType == ':' || respType == '-' {
+		// simple strings, ints and errors are just one line
+		w, err := fwdLine(in, out)
+		written += w
+		return written, err
+	} else if respType == '$' {
+		// bulk string, length on one line, then content on another
+		length, w, err := readFwdInt(in, out)
+		written += w
+		if err != nil {
+			return written, err
+		}
+
+		w2, err := io.CopyN(out, in, int64(length)+2) // + 2 to include final trailing \r\n
+		written += int(w2)
+		return written, err
+	} else if respType == '*' {
+		// array, num members on one line then N more full responses
+		numMembers, w, err := readFwdInt(in, out)
+		written += w
+		if err != nil {
+			return written, err
+		}
+		for i := 0; i < numMembers; i++ {
+			w, err = forwardResponse(in, out)
+			written += w
+			if err != nil {
+				return written, err
+			}
+		}
+		return written, nil
+	}
+	return written, err
+}
+
+func fwdLine(in *bufio.Reader, out io.Writer) (int, error) {
+	toFwd, err := in.ReadString('\n')
+	if err != nil {
+		return 1, err
+	}
+	written, err := out.Write([]byte(toFwd))
+	return written + 1, err
+}
+
+// reads an int from the rest of this line, while forwarding it all to client.  returns int, fwded, error
+func readFwdInt(in *bufio.Reader, out io.Writer) (int, int, error) {
+	lenString, err := in.ReadBytes('\n')
+	if err != nil {
+		return 0, 0, err
+	}
+	// forward with '\r\n'
+	w, err := out.Write(lenString)
+	if err != nil {
+		return 0, w, err
+	}
+	fmt.Printf("forwarding int, lenString: %s\n", lenString)
+	// pop off '\r\n' to convert to int
+	lenString = lenString[:len(lenString)-2]
+	length, err := strconv.Atoi(string(lenString))
+	fmt.Printf("forwarding int, length: %d\n", length)
+	return length, w, err
 }
