@@ -5,10 +5,11 @@ import (
 	log "github.com/jbooth/raftis/rlog"
 	"io"
 	"sync"
+  "github.com/jbooth/raftis/config"
 )
 
-func NewClusterMember(c *ClusterConfig, lg *log.Logger) (*ClusterMember, error) {
-	slotHosts := make(map[int32][]Host)
+func NewClusterMember(c *config.ClusterConfig, lg *log.Logger) (*ClusterMember, error) {
+	slotHosts := make(map[int32][]config.Host)
 	for _, shard := range c.Shards {
 		for _, slot := range shard.Slots {
 			slotHosts[int32(slot)] = shard.Hosts
@@ -29,8 +30,8 @@ func NewClusterMember(c *ClusterConfig, lg *log.Logger) (*ClusterMember, error) 
 type ClusterMember struct {
 	lg        *log.Logger
 	l         *sync.RWMutex
-	c         *ClusterConfig
-	slotHosts map[int32][]Host
+	c         *config.ClusterConfig
+	slotHosts map[int32][]config.Host
 	hostConns map[string]*PassthruConn // for forwarding commands when we don't have a key
 }
 

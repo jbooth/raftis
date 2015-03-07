@@ -7,10 +7,8 @@ function startraftis() {
     rm -rf $dir
     mkdir -p $dir
 
-    port=`expr $1 \\* 10 + 16369`
-    iport=`expr $1 + 11102`
-    echo starting raftis on port $port, iport $iport
-    raftis -r 127.0.0.1:$port -i 127.0.0.1:$iport -d $dir -p 127.0.0.1:11103,127.0.0.1:11104,127.0.0.1:11105 >$dir/out.log 2>&1 &
+    echo starting raftis $1
+    raftis -config local$1.cfg -d $dir >$dir/out.log 2>&1 &
     pid=$!
     echo $pid > $dir/pid
     echo "launched server$1, pid $pid"

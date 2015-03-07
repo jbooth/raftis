@@ -3,6 +3,7 @@ package raftis
 import (
 	"fmt"
 	"github.com/jbooth/raftis"
+	"github.com/jbooth/raftis/config"
 	"github.com/xuyu/goredis"
 	"math/rand"
 	"os"
@@ -11,7 +12,7 @@ import (
 
 type cluster struct {
 	homeDirs []string
-	hosts    []raftis.Host
+	hosts    []config.Host
 	dbs      []*raftis.Server
 	clients  []*goredis.Redis
 }
@@ -22,32 +23,34 @@ func (c *cluster) rclient() *goredis.Redis {
 	return c.clients[(rand.Int() % nclients)]
 }
 
+const debugLogging = true
+
 var testcluster *cluster
 var once sync.Once
 
-var shardsForConfig = []raftis.Shard{
-	raftis.Shard{
+var shardsForConfig = []config.Shard{
+	config.Shard{
 		Slots: []uint32{0, 3, 6, 9},
-		Hosts: []raftis.Host{
-			raftis.Host{"127.0.0.1:8679", "127.0.0.1:1103", "lvs1"},
-			raftis.Host{"127.0.0.1:8689", "127.0.0.1:1104", "lvs1"},
-			raftis.Host{"127.0.0.1:8699", "127.0.0.1:1105", "lvs1"},
+		Hosts: []config.Host{
+			config.Host{"127.0.0.1:8679", "127.0.0.1:1103", "lvs1"},
+			config.Host{"127.0.0.1:8689", "127.0.0.1:1104", "lvs1"},
+			config.Host{"127.0.0.1:8699", "127.0.0.1:1105", "lvs1"},
 		},
 	},
-	raftis.Shard{
+	config.Shard{
 		Slots: []uint32{1, 4, 7},
-		Hosts: []raftis.Host{
-			raftis.Host{"127.0.0.1:8779", "127.0.0.1:1203", "lvs2"},
-			raftis.Host{"127.0.0.1:8789", "127.0.0.1:1204", "lvs2"},
-			raftis.Host{"127.0.0.1:8799", "127.0.0.1:1205", "lvs2"},
+		Hosts: []config.Host{
+			config.Host{"127.0.0.1:8779", "127.0.0.1:1203", "lvs2"},
+			config.Host{"127.0.0.1:8789", "127.0.0.1:1204", "lvs2"},
+			config.Host{"127.0.0.1:8799", "127.0.0.1:1205", "lvs2"},
 		},
 	},
-	raftis.Shard{
+	config.Shard{
 		Slots: []uint32{2, 5, 8},
-		Hosts: []raftis.Host{
-			raftis.Host{"127.0.0.1:8879", "127.0.0.1:1303", "lvs3"},
-			raftis.Host{"127.0.0.1:8889", "127.0.0.1:1304", "lvs3"},
-			raftis.Host{"127.0.0.1:8899", "127.0.0.1:1305", "lvs3"},
+		Hosts: []config.Host{
+			config.Host{"127.0.0.1:8879", "127.0.0.1:1303", "lvs3"},
+			config.Host{"127.0.0.1:8889", "127.0.0.1:1304", "lvs3"},
+			config.Host{"127.0.0.1:8899", "127.0.0.1:1305", "lvs3"},
 		},
 	},
 }
@@ -65,7 +68,7 @@ func setupTest() {
 
 		fmt.Printf("%+v\n", shardsForConfig)
 		testcluster.dbs = make([]*raftis.Server, 9)
-		testcluster.hosts = make([]raftis.Host, 9)
+		testcluster.hosts = make([]config.Host, 9)
 		testcluster.clients = make([]*goredis.Redis, 9)
 		// crawl the shard nested structure (3 inside 3) to pull our host
 		for s := 0; s < 3; s++ {
@@ -92,12 +95,14 @@ func setupTest() {
 
 				fmt.Printf("host %+v\n", testcluster.hosts[j])
 
-				cfg := &raftis.ClusterConfig{
+				cfg := &config.ClusterConfig{
 					NumSlots: uint32(10),
 					Me:       testcluster.hosts[j],
 					Shards:   shardsForConfig,
 				}
-				testcluster.dbs[j], err = raftis.NewServer(cfg, testcluster.homeDirs[j])
+				testcluster.dbs[j], err = raftis.NewServer(
+          cfg, testcluster.homeDirs[j], debugLogging)
+
 				if err != nil {
 					panic(err)
 				}

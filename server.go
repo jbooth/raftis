@@ -2,11 +2,14 @@ package raftis
 
 import (
 	"fmt"
+	"bytes"
+	"strings"
 	"github.com/jbooth/flotilla"
 	mdb "github.com/jbooth/gomdb"
 	ops "github.com/jbooth/raftis/ops"
 	redis "github.com/jbooth/raftis/redis"
 	log "github.com/jbooth/raftis/rlog"
+	config "github.com/jbooth/raftis/config"
 	"io"
 	"net"
 	"os"
@@ -48,10 +51,12 @@ var (
 		"HINCRBY": ops.HINCRBY,
 		"HDEL":    ops.HDEL,
 		// sets
-		// SADD
+		"SADD": ops.SADD,
 		// ttl
 		"EXPIRE": ops.EXPIRE,
 		//EXPIREAT
+		// pseudo lua scripting :)
+		"EVAL": ops.EVAL,
 		// noop is for sync requests
 		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return []byte("+PONG\r\n"), nil },
 	}
@@ -62,10 +67,9 @@ var (
 		"EXISTS": ops.EXISTS,
 		//TYPE
 		// lists
-		"LLEN": ops.LLEN,
-		// LRANGE
+		"LLEN":   ops.LLEN,
+		"LRANGE": ops.LRANGE,
 		// LINDEX
-
 		// hashes
 		"HGET":    ops.HGET,
 		"HMGET":   ops.HMGET,
@@ -75,8 +79,8 @@ var (
 		// HKEYS
 		// HVALS
 		// sets
-		// SMEMBERS
-		// SCARD
+		"SMEMBERS": ops.SMEMBERS,
+		"SCARD":    ops.SCARD,
 		// SISMEMBER
 		// SRANDMEMBER
 		// ttl
@@ -91,10 +95,18 @@ type Server struct {
 	lg       *log.Logger
 }
 
-func NewServer(c *ClusterConfig, dataDir string) (*Server, error) {
-	lg := log.New(os.Stderr, fmt.Sprintf("Raftis %s:\t", c.Me.RedisAddr), log.LstdFlags)
+func NewServer(c *config.ClusterConfig,
+               dataDir string,
+               debugLogging bool) (*Server, error) {
+
+	lg := log.New(
+		os.Stderr,
+		fmt.Sprintf("Raftis %s:\t", c.Me.RedisAddr),
+		log.LstdFlags,
+		debugLogging)
+
 	// find our replicaset
-	var ours []Host = nil
+	var ours []config.Host = nil
 	for _, s := range c.Shards {
 		for _, h := range s.Hosts {
 			if h.RedisAddr == c.Me.RedisAddr && h.FlotillaAddr == c.Me.FlotillaAddr {
@@ -140,6 +152,7 @@ func (s *Server) Serve() (err error) {
 		s.redis.Close()
 		s.flotilla.Close()
 		s.lg.Printf("server on %s going down: %s", s.redis.Addr().String(), err)
+		return
 	}(s)
 	for {
 		c, err := s.redis.AcceptTCP()
@@ -152,7 +165,28 @@ func (s *Server) Serve() (err error) {
 	}
 }
 
+var get []byte = []byte("GET")
 func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
+
+	if r.Name == "CONFIG" &&
+		len(r.Args) > 0 &&
+		strings.ToUpper(string(r.Args[0])) == "GET" {
+		var resp redis.ReplyWriter
+		if len(r.Args) == 1 {
+			resp = redis.NewError("ERR Wrong number of arguments for CONFIG GET")
+		} else {
+			ret := make([][]byte, 0)
+			if bytes.Equal(r.Args[1], []byte("cluster")) {
+				var buf bytes.Buffer
+				config.WriteConfig(s.cluster.c, &buf)
+				ret = append(ret, []byte("cluster"))
+				ret = append(ret, buf.Bytes())
+			}
+			resp = &redis.ArrayReply{ret}
+		}
+		return resp
+	}
+
 	if len(r.Args) > 0 {
 		hasKey, err := s.cluster.HasKey(r.Args[0])
 		s.lg.Printf("Local for key %s ? %s", r.Args[0], hasKey)

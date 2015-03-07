@@ -1,6 +1,5 @@
 package dbwrap
 
-
 import (
 	"encoding/binary"
 )
@@ -9,7 +8,6 @@ import (
 // MembersArray		[]byte  = len(m1) + m1 ... len(mn) + mn
 // RawArray		[]byte = len(n) + MembersArray(n)
 // RawArrayValue	[]byte = ttl + LIST/HASH/SET/SORTEDSET type + RawArray
-
 
 // SERIALIZER
 func MembersToMembersArray(members [][]byte) []byte {
@@ -24,7 +22,11 @@ func AppendMembersToMembersArray(membersArray []byte, members [][]byte) []byte {
 }
 
 func BuildRawArray(members [][]byte) []byte {
-	return prependLength(uint32(len(members)), MembersToMembersArray(members))
+	return BuildRawArray0(uint32(len(members)), MembersToMembersArray(members))
+}
+
+func BuildRawArray0(length uint32, membersArray []byte) []byte {
+	return prependLength(length, membersArray)
 }
 
 // prepends length of val to val
@@ -44,7 +46,6 @@ func lengthInBytes(l uint32) []byte {
 	return lengthSpace
 }
 
-
 // DESERIALIZER
 // takes first 4 bytes
 func ExtractLength(withLength []byte) (uint32, []byte) {
@@ -54,29 +55,52 @@ func ExtractLength(withLength []byte) (uint32, []byte) {
 
 func RawArrayToMembers(rawArray []byte) [][]byte {
 	length, membersArray := ExtractLength(rawArray)
-	members := make([][]byte, 0);
-	var l uint32
-	for i := uint32(0); i < length; i++ {
-		l, membersArray = ExtractLength(membersArray)
-		members = append(members, membersArray[:l])
-		membersArray = membersArray[l:]
+	return MembersArrayToMembers(length, membersArray)
+}
+
+func MembersArrayToMembers(n uint32, membersArray []byte) [][]byte {
+	members := make([][]byte, n)
+	for i := uint32(0); i < n; i++ {
+		l, rest := ExtractLength(membersArray)
+		members[i] = rest[:l]
+		membersArray = rest[l:]
 	}
 	return members
 }
 
 func MembersToMap(members [][]byte) map[string]string {
 	m := make(map[string]string)
-	for i := 0; i < len(members); i+=2 {
+	for i := 0; i < len(members); i += 2 {
 		m[string(members[i])] = string(members[i+1])
 	}
 	return m
 }
 
 func MapToMembers(m map[string]string) [][]byte {
-	members := make([][]byte, 0);
+	members := make([][]byte, 0)
 	for k, v := range m {
 		members = append(members, []byte(k))
 		members = append(members, []byte(v))
+	}
+	return members
+}
+
+func MembersToSet(members [][]byte) (map[string]struct{}, int) {
+	return AddMembersToSet(make(map[string]struct{}), members)
+}
+
+func AddMembersToSet(set map[string]struct{}, newMembers [][]byte) (map[string]struct{}, int) {
+	originalLength := len(set)
+	for i := 0; i < len(newMembers); i++ {
+		set[string(newMembers[i])] = struct{}{}
+	}
+	return set, len(set) - originalLength
+}
+
+func SetToMembers(s map[string]struct{}) [][]byte {
+	members := make([][]byte, 0)
+	for k, _ := range s {
+		members = append(members, []byte(k))
 	}
 	return members
 }
