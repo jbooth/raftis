@@ -49,7 +49,6 @@ def main():
     gevent.sleep(1)
 
     stime = time()
-    ask_redis()
     gevent.joinall(redisgreenlets)
 
     took= time() - stime
