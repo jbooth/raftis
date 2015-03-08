@@ -2,11 +2,12 @@ import gevent.monkey
 gevent.monkey.patch_all()
 
 import argparse
+import uuid
 
 import logging
 logging.basicConfig()
 log = logging.getLogger()
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 
 import threading
@@ -17,24 +18,33 @@ import redis.connection
 from time import time
 from operator import methodcaller
 
+operations=['get', 'set']
+DEFAULT_VALUE = 'uuid4'
+
 parser = argparse.ArgumentParser(description='Raftis benchmark')
 parser.add_argument('--host', default="localhost")
 parser.add_argument('--port', type=int, default="6379")
 parser.add_argument('--key', default='jay')
-parser.add_argument('--operation', default='get')
-parser.add_argument('--expected', default='5')
+parser.add_argument('--value', default=DEFAULT_VALUE)
+parser.add_argument('--operation', choices=operations, default='get')
+parser.add_argument('--expected')
 parser.add_argument('--requests', type=int, default=500)
-aargs = parser.parse_args()
 
+args = parser.parse_args()
+
+if args.operation == 'get' and args.expected == None:
+    log.error('set requires expected value, add --expected')
+    parser.print_usage()
+    sys.exit(1)
  
-r = redis.StrictRedis(host=aargs.host, port=aargs.port)
+r = redis.StrictRedis(host=args.host, port=args.port)
 p = r.connection_pool
  
  
 def main():
-    crongreenlet = gevent.spawn(cron)
-    log.info("{} greenlets connecting to raftis".format(aargs.requests))
-    redisgreenlets = [gevent.spawn(ask_redis) for _ in xrange(aargs.requests)]
+    maingreenlet = gevent.spawn(progress)
+    log.info("{} greenlets connecting to raftis".format(args.requests))
+    redisgreenlets = [gevent.spawn(ask_redis) for _ in xrange(args.requests)]
     # Wait until all greenlets have started and connected.
     gevent.sleep(1)
 
@@ -43,15 +53,30 @@ def main():
 
     took= time() - stime
     print
-    log.info("{:.2f} [req/s], took {:.2f} [s]".format(aargs.requests / took, took))
-    crongreenlet.kill()
+    log.info("{:.2f} [req/s], took {:.2f} [s]".format(args.requests / took, took))
+    maingreenlet.kill()
  
  
 def ask_redis():
-    assert methodcaller(aargs.operation, aargs.key)(r) is aargs.expected 
+    raftis_command = [args.operation, args.key]
+    expected = None
+
+    if args.operation == 'set':
+        expected = True
+        if args.value == DEFAULT_VALUE:
+            raftis_command.append(uuid.uuid4())
+        else:
+            raftis_command.append(args.value)
+
+    if args.operation == 'get':
+        expected = args.expected 
+
+    response = methodcaller(*raftis_command)(r)
+    if response != expected:
+        log.error("expected: %s, got %s", expected, response)
  
  
-def cron():
+def progress():
     while True:
         print('.'),
         sys.stdout.flush()
