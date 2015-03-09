@@ -2,8 +2,8 @@ package raftis
 
 import (
 	redis "github.com/jbooth/raftis/redis"
+	rlog "github.com/jbooth/raftis/rlog"
 	"io"
-  rlog "github.com/jbooth/raftis/rlog"
 	"net"
 	"strings"
 )
@@ -40,6 +40,7 @@ func (conn Conn) serveClient(s *Server) (err error) {
 		// dispatch request
 		response := s.doRequest(conn, request)
 		// pass pending response to response writer
+		s.lg.Printf("queuing response for %s", request.Name)
 		responses <- response
 	}
 	return nil
@@ -48,6 +49,7 @@ func (conn Conn) serveClient(s *Server) (err error) {
 func sendResponses(resps chan io.WriterTo, conn net.Conn, lg *rlog.Logger) {
 	defer conn.Close()
 	for r := range resps {
+		lg.Printf("Got resp, invoking writeTo")
 		n, err := r.WriteTo(conn)
 		if err != nil {
 			lg.Printf("Error writing to %s, closing.. wrote %d bytes, err: %s", conn.RemoteAddr().String(), n, err)

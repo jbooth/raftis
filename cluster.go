@@ -105,7 +105,6 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 func (c *ClusterMember) getConnForHost(host string) (*PassthruConn, error) {
 	conn, ok := c.hostConns[host]
 	if ok {
-		fmt.Printf("Found existing conn for host %s", host)
 		return conn, nil
 	}
 	// switch to writelock
@@ -122,11 +121,9 @@ func (c *ClusterMember) getConnForHost(host string) (*PassthruConn, error) {
 	}
 	conn, err := NewPassThru(host)
 	if err == nil {
-		fmt.Printf("Found existing conn for host %s", host)
 		c.hostConns[host] = conn
 		return conn, nil
 	} else {
-		fmt.Printf("Err connecting to host %s : %s", host, err)
 		return nil, err
 	}
 }

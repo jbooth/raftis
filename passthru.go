@@ -53,7 +53,6 @@ func (p *PassthruConn) Command(cmd string, args [][]byte) (*PassthruResp, error)
 	ready := make(chan error, 1)
 	done := make(chan error, 1)
 	resp := &PassthruResp{ready, done, p}
-	fmt.Printf("Dispatched command, queuing resp\n")
 	p.pendingResp <- resp
 	return resp, nil
 }
@@ -64,14 +63,11 @@ func (p *PassthruConn) routeResponses() {
 	// we iterate in a loop, signaling ready on one chan then blocking till done on the other
 	// actual pipelining of responses is done by the goroutine invoking WriteTo() on PassthruResp to send to the actual client,
 	for resp := range p.pendingResp {
-		fmt.Printf("routeResponses Signaling ready to cmd, errstate: %s", err)
 
 		//signal ready
 		resp.ready <- err
 		// wait done
-		fmt.Printf("routeResponses waiting cmd done, errstate: %s", err)
 		err = <-resp.done
-		fmt.Printf("routeResponses cmd finished, errstate: %s", err)
 		if err != nil {
 			p.underlyingConn.Close()
 			close(p.pendingResp)
@@ -163,30 +159,25 @@ type PassthruResp struct {
 // Forwards a remote command to a client.
 func (p *PassthruResp) WriteTo(w io.Writer) (int64, error) {
 	// wait till our turn
-	fmt.Printf("passthruResp waiting our turn to read\n")
 	err := <-p.ready
 	if err != nil {
 		fmt.Printf("passthru ERR! %s\n", err)
 		p.done <- err
 		return 0, err
 	}
-	fmt.Printf("passthruResp working \n")
 	// forward it along
 	written, err := forwardResponse(p.p.bufIn, w)
 	// signal done
-	fmt.Printf("passthruResp signaling done, errstate %s \n", err)
 	p.done <- err
 	return int64(written), err
 }
 
 func forwardResponse(in *bufio.Reader, out io.Writer) (int, error) {
-	fmt.Printf("forwardResponse reading first byte\n")
 	// read first byte
 	respType, err := in.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	fmt.Printf("forwardResponse got response type %s forwarding first byte \n", string(respType))
 	// forward first byte
 	written, err := out.Write([]byte{respType})
 	if err != nil {
@@ -248,10 +239,8 @@ func readFwdInt(in *bufio.Reader, out io.Writer) (int, int, error) {
 	if err != nil {
 		return 0, w, err
 	}
-	fmt.Printf("forwarding int, lenString: %s\n", lenString)
 	// pop off '\r\n' to convert to int
 	lenString = lenString[:len(lenString)-2]
 	length, err := strconv.Atoi(string(lenString))
-	fmt.Printf("forwarding int, length: %d\n", length)
 	return length, w, err
 }

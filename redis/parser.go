@@ -26,20 +26,25 @@ func ParseRequest(conn io.ReadCloser) (*Request, error) {
 		if _, err := fmt.Sscanf(line, "*%d\r", &argsCount); err != nil {
 			return nil, malformed("*<numberOfArguments>", line)
 		}
+		//fmt.Printf("argsCount: %d\n", argsCount)
 		// All next lines are pairs of:
 		//$<number of bytes of argument 1> CR LF
 		//<argument data> CR LF
 		// first argument is a command name, so just convert
+		//fmt.Printf("Reading first argument\n")
 		firstArg, err := readArgument(r)
 		if err != nil {
 			return nil, err
 		}
+		//fmt.Printf("firstArg %s\n", firstArg)
 
 		args := make([][]byte, argsCount-1)
 		for i := 0; i < argsCount-1; i += 1 {
+			//fmt.Printf("Reading %d argument\n", i)
 			if args[i], err = readArgument(r); err != nil {
 				return nil, err
 			}
+			//fmt.Printf("Got %s for %d arg\n", args[i], i)
 		}
 
 		return &Request{

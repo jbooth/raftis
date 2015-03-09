@@ -58,7 +58,10 @@ var (
 		// pseudo lua scripting :)
 		"EVAL": ops.EVAL,
 		// noop is for sync requests
-		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return []byte("+PONG\r\n"), nil },
+		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+			txn.Abort()
+			return []byte("+PONG\r\n"), nil
+		},
 	}
 
 	readOps = map[string]readOp{
@@ -212,7 +215,6 @@ func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 	}
 	readOp, ok := readOps[r.Name]
 	if ok {
-		fmt.Printf("Got read op %s\n", r.Name)
 		r := pendingRead{readOp, r.Args, s}
 		if c.syncRead {
 			return pendingSyncRead{s.flotilla.Command("NOOP", emptyArgs), r}
