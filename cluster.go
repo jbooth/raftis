@@ -35,7 +35,21 @@ type ClusterMember struct {
 	hostConns map[string]*PassthruConn // for forwarding commands when we don't have a key
 }
 
-func (c *ClusterMember) HasKey(key []byte) (bool, error) {
+func (c *ClusterMember) HasKey(cmdName string, args [][]byte) (bool, error) {
+	if cmdName == "PING" {
+		// pings always evaluated locally
+		return true, nil
+	}
+	if len(args) == 0 {
+		return false, fmt.Errorf("HasKey Can't handle 0-arg commands other than PING.  Cmd: %s", cmdName)
+	}
+	var key []byte
+	if cmdName == "EVAL" {
+		// first arg is command name, 2nd is key
+		key = args[1]
+	} else {
+		key = args[0]
+	}
 	s := c.slotForKey(key)
 	hosts, ok := c.slotHosts[s]
 	if !ok {

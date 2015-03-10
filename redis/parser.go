@@ -48,7 +48,7 @@ func ParseRequest(conn io.ReadCloser) (*Request, error) {
 		}
 
 		return &Request{
-			Name: strings.ToLower(string(firstArg)),
+			Name: strings.ToUpper(string(firstArg)),
 			Args: args,
 			Body: conn,
 		}, nil
