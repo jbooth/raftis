@@ -1,18 +1,19 @@
 package raftis
 
 import (
-	"fmt"
 	"bytes"
-	"strings"
+	"fmt"
 	"github.com/jbooth/flotilla"
 	mdb "github.com/jbooth/gomdb"
+	config "github.com/jbooth/raftis/config"
 	ops "github.com/jbooth/raftis/ops"
 	redis "github.com/jbooth/raftis/redis"
 	log "github.com/jbooth/raftis/rlog"
-	config "github.com/jbooth/raftis/config"
 	"io"
 	"net"
 	"os"
+	"strings"
+	"time"
 )
 
 // writes a valid redis protocol response to the supplied Writer, returning bytes written, err
@@ -96,8 +97,8 @@ type Server struct {
 }
 
 func NewServer(c *config.ClusterConfig,
-               dataDir string,
-               debugLogging bool) (*Server, error) {
+	dataDir string,
+	debugLogging bool) (*Server, error) {
 
 	lg := log.New(
 		os.Stderr,
@@ -122,9 +123,24 @@ func NewServer(c *config.ClusterConfig,
 		flotillaPeers[idx] = h.FlotillaAddr
 	}
 
+	flotillaListen, err := net.Listen("tcp", c.Me.FlotillaAddr)
+	if err != nil {
+		return nil, err
+	}
 	// start flotilla
-	// peers []string, dataDir string, bindAddr string, ops map[string]Command
-	f, err := flotilla.NewDefaultDB(flotillaPeers, dataDir, c.Me.FlotillaAddr, writeOps)
+	dialer := &dialer{
+		&net.Dialer{
+			Timeout:   5 * time.Minute,
+			LocalAddr: nil,
+			DualStack: false,
+			KeepAlive: 100 * time.Second * 86400,
+		},
+	}
+	f, err := flotilla.NewDB(
+		flotillaPeers,
+		dataDir,
+		flotillaListen, dialer.Dial, writeOps, lg.WrappedLogger.Logger)
+
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +181,16 @@ func (s *Server) Serve() (err error) {
 	}
 }
 
+type dialer struct {
+	d *net.Dialer
+}
+
+func (d *dialer) Dial(address string, timeout time.Duration) (net.Conn, error) {
+	return d.d.Dial("tcp", address)
+}
+
 var get []byte = []byte("GET")
+
 func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 
 	if r.Name == "CONFIG" &&
