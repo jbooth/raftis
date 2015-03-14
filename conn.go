@@ -17,6 +17,10 @@ func NewConn(c net.Conn) Conn {
 	return Conn{c, false}
 }
 
+type waiter interface {
+	waitDone()
+}
+
 func (conn Conn) serveClient(s *Server) (err error) {
 	responses := make(chan io.WriterTo, 32)
 	defer func() {
@@ -42,6 +46,10 @@ func (conn Conn) serveClient(s *Server) (err error) {
 		// pass pending response to response writer
 		s.lg.Printf("queuing response for %s", request.Name)
 		responses <- response
+		waiter, ok := response.(waiter)
+		if ok {
+			waiter.waitDone()
+		}
 	}
 	return nil
 }

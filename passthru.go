@@ -50,8 +50,8 @@ func (p *PassthruConn) Command(cmd string, args [][]byte) (*PassthruResp, error)
 
 	// flush command, register receive chan
 
-	ready := make(chan error, 1)
-	done := make(chan error, 1)
+	ready := make(chan error)
+	done := make(chan error)
 	resp := &PassthruResp{ready, done, p}
 	p.pendingResp <- resp
 	return resp, nil
@@ -77,6 +77,10 @@ func (p *PassthruConn) routeResponses() {
 
 // writes and flushes command to specified bufio.Writer
 func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
+	// first send a ping for consistency
+	out.WriteString("PING\r\n")
+
+	// now process command
 	// we send an array of bulkstrings for the command
 	n := len(args) + 1
 	err := out.WriteByte(byte('*'))
@@ -165,6 +169,13 @@ func (p *PassthruResp) WriteTo(w io.Writer) (int64, error) {
 		p.done <- err
 		return 0, err
 	}
+	// pop off ping response "+PING\r\n"
+	pong := make([]byte, 7)
+	_, err = io.ReadFull(p.p.bufIn, pong)
+	if err != nil {
+		return 0, err
+	}
+
 	// forward it along
 	written, err := forwardResponse(p.p.bufIn, w)
 	// signal done
