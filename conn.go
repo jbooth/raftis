@@ -30,6 +30,7 @@ func (conn Conn) serveClient(s *Server) (err error) {
 	go sendResponses(responses, conn, s.lg)
 	// read requests
 	for {
+		s.lg.Printf("conn parsing request")
 		request, err := redis.ParseRequest(conn)
 		if err != nil {
 			return err
@@ -46,10 +47,13 @@ func (conn Conn) serveClient(s *Server) (err error) {
 		// pass pending response to response writer
 		s.lg.Printf("queuing response for %s", request.Name)
 		responses <- response
+		s.lg.Printf("response queued")
 		waiter, ok := response.(waiter)
 		if ok {
+			s.lg.Printf("waiting done for %s", request.Name)
 			waiter.waitDone()
 		}
+		s.lg.Printf("conn relooping")
 	}
 	return nil
 }

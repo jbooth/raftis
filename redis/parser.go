@@ -14,10 +14,12 @@ func ParseRequest(conn io.ReadCloser) (*Request, error) {
 	r := bufio.NewReader(conn)
 	// first line of redis request should be:
 	// *<number of arguments>CRLF
+	fmt.Printf("parser reading line to \\n\n")
 	line, err := r.ReadString('\n')
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("first line %s\n", line)
 	// note that this line also protects us from negative integers
 	var argsCount int
 
@@ -26,7 +28,7 @@ func ParseRequest(conn io.ReadCloser) (*Request, error) {
 		if _, err := fmt.Sscanf(line, "*%d\r", &argsCount); err != nil {
 			return nil, malformed("*<numberOfArguments>", line)
 		}
-		//fmt.Printf("argsCount: %d\n", argsCount)
+		fmt.Printf("argsCount: %d\n", argsCount)
 		// All next lines are pairs of:
 		//$<number of bytes of argument 1> CR LF
 		//<argument data> CR LF
@@ -36,7 +38,7 @@ func ParseRequest(conn io.ReadCloser) (*Request, error) {
 		if err != nil {
 			return nil, err
 		}
-		//fmt.Printf("firstArg %s\n", firstArg)
+		fmt.Printf("firstArg %s\n", firstArg)
 
 		args := make([][]byte, argsCount-1)
 		for i := 0; i < argsCount-1; i += 1 {
@@ -44,7 +46,7 @@ func ParseRequest(conn io.ReadCloser) (*Request, error) {
 			if args[i], err = readArgument(r); err != nil {
 				return nil, err
 			}
-			//fmt.Printf("Got %s for %d arg\n", args[i], i)
+			fmt.Printf("Got %s for %d arg\n", args[i], i)
 		}
 
 		return &Request{
