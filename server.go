@@ -18,6 +18,7 @@ import (
 
 // writes a valid redis protocol response to the supplied Writer, returning bytes written, err
 type readOp func(args [][]byte, txn *mdb.Txn, w io.Writer) (int64, error)
+type serverOp func(args [][]byte, c *Conn, s *Server) io.WriterTo
 
 var emptyBytes = make([]byte, 0)
 var emptyArgs = make([][]byte, 0)
@@ -59,7 +60,10 @@ var (
 		// pseudo lua scripting :)
 		"EVAL": ops.EVAL,
 		// noop is for sync requests
-		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) { return []byte("+PONG\r\n"), nil },
+		"PING": func(args [][]byte, txn *mdb.Txn) ([]byte, error) {
+			txn.Abort()
+			return []byte("+PONG\r\n"), nil
+		},
 	}
 
 	readOps = map[string]readOp{
@@ -86,6 +90,12 @@ var (
 		// SRANDMEMBER
 		// ttl
 		"TTL": ops.TTL,
+	}
+
+	serverOps = map[string]serverOp{
+		"CONFIG":     handleConfig,
+		"SYNCMODE":   dosync,
+		"NOSYNCMODE": donosync,
 	}
 )
 
@@ -191,7 +201,7 @@ func (d *dialer) Dial(address string, timeout time.Duration) (net.Conn, error) {
 
 var get []byte = []byte("GET")
 
-func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
+func (s *Server) doRequest(c *Conn, r *redis.Request) io.WriterTo {
 
 	if r.Name == "CONFIG" &&
 		len(r.Args) > 0 &&
@@ -212,22 +222,31 @@ func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 		return resp
 	}
 
-	if len(r.Args) > 0 {
-		//hasKey, err := s.cluster.HasKey(r.Args[0])
-		//if err != nil {
-		//return redis.NewError(fmt.Sprintf("error checking key status for key %s : %s", r.Args[0], err))
-		//}
-		//if !hasKey {
-		//// we don't have key locally, forward to correct node
-		//fwd, err := s.cluster.ForwardCommand(r.Name, r.Args)
-		//if err != nil {
-		//return redis.NewError(fmt.Sprintf("Error forwarding command: %s", err.Error()))
-		//}
-		//return fwd
-		//}
+	serverOp, ok := serverOps[r.Name]
+	if ok {
+		return serverOp(r.Args, c, s)
 	}
+	hasKey, err := s.cluster.HasKey(r.Name, r.Args)
+	if err != nil {
+		keyStr := "NONE"
+		if r.Args != nil && len(r.Args) > 0 {
+			keyStr = string(r.Args[0])
+		}
+		s.lg.Errorf("error checking key status for key %s : %s", keyStr, err)
+		return redis.NewError(fmt.Sprintf("error checking key status for key %s : %s", keyStr, err))
+	}
+	if !hasKey {
+		s.lg.Printf("Not local for key, forwarding")
+		// we don't have key locally, forward to correct node
+		fwd, err := s.cluster.ForwardCommand(r.Name, r.Args)
+		if err != nil {
+			return redis.NewError(fmt.Sprintf("Error forwarding command: %s", err.Error()))
+		}
+		return fwd
+	}
+	s.lg.Printf("Local for key processing")
 	// have the key locally, apply command or execute read
-	_, ok := writeOps[r.Name]
+	_, ok = writeOps[r.Name]
 	if ok {
 		return pendingWrite{s.flotilla.Command(r.Name, r.Args)}
 	}
@@ -235,7 +254,7 @@ func (s *Server) doRequest(c Conn, r *redis.Request) io.WriterTo {
 	if ok {
 		r := pendingRead{readOp, r.Args, s}
 		if c.syncRead {
-			return pendingSyncRead{s.flotilla.Command("NOOP", emptyArgs), r}
+			return pendingSyncRead{s.flotilla.Command("PING", emptyArgs), r}
 		} else {
 			return r
 		}
@@ -279,10 +298,12 @@ type pendingSyncRead struct {
 
 func (p pendingSyncRead) WriteTo(w io.Writer) (int64, error) {
 	// wait for no-op to sync
+	p.r.s.lg.Printf("syncRead waiting on noopResp\n")
 	noopResp := <-p.noop
 	if noopResp.Err != nil {
 		return redis.NewError(noopResp.Err.Error()).WriteTo(w)
 	}
+	fmt.Printf("syncRead got noopResp, executing read\n")
 	// handle as normal read
 	return p.r.WriteTo(w)
 }
@@ -290,4 +311,35 @@ func (p pendingSyncRead) WriteTo(w io.Writer) (int64, error) {
 func (s *Server) Close() error {
 	s.redis.Close()
 	return s.flotilla.Close()
+}
+
+func handleConfig(args [][]byte, c *Conn, s *Server) io.WriterTo {
+	if len(args) > 0 && strings.ToUpper(string(args[0])) == "GET" {
+		var resp redis.ReplyWriter
+		if len(args) == 1 {
+			resp = redis.NewError("ERR Wrong number of arguments for CONFIG GET")
+		} else {
+			ret := make([][]byte, 0)
+			if bytes.Equal([]byte(strings.ToLower(string(args[1]))), []byte("cluster")) {
+				var buf bytes.Buffer
+				config.WriteConfig(s.cluster.c, &buf)
+				ret = append(ret, []byte("cluster"))
+				ret = append(ret, buf.Bytes())
+			}
+			resp = &redis.ArrayReply{ret}
+		}
+		return resp
+	} else {
+		return redis.NewError(fmt.Sprintf("Unrecognized CONFIG command %+v", args))
+	}
+}
+
+func dosync(args [][]byte, c *Conn, s *Server) io.WriterTo {
+	c.syncRead = true
+	return &redis.StatusReply{"OK"}
+}
+
+func donosync(args [][]byte, c *Conn, s *Server) io.WriterTo {
+	c.syncRead = false
+	return &redis.StatusReply{"OK"}
 }

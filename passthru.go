@@ -2,6 +2,8 @@ package raftis
 
 import (
 	"bufio"
+	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"sync"
@@ -12,10 +14,24 @@ func NewPassThru(remoteHost string) (*PassthruConn, error) {
 	if err != nil {
 		return nil, err
 	}
+	// go for sync mode
+	_, err = conn.Write([]byte("*1\r\n$8\r\nSYNCMODE\r\n"))
+	if err != nil {
+		return nil, fmt.Errorf("Error writing SYNCMODE establishing conn to %s", remoteHost)
+	}
+	in := bufio.NewReader(conn)
+	line, err := in.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("Error writing reading SYNCMODE resp while establishing conn to %s", remoteHost)
+	}
+	if line != "+OK\r\n" {
+		return nil, fmt.Errorf("Bad response when switching to SYNCMODE on conn to %s : %s", remoteHost, line)
+	}
+
 	ret := &PassthruConn{
-		make(chan chan PassthruResp),
+		make(chan *PassthruResp),
 		conn,
-		bufio.NewReader(conn),
+		in,
 		bufio.NewWriter(conn),
 		new(sync.Mutex),
 	}
@@ -28,21 +44,16 @@ func NewPassThru(remoteHost string) (*PassthruConn, error) {
 // will yield a single response of []byte,error (naively scanned until first '\n')
 // does not support multiline responses yet
 type PassthruConn struct {
-	pendingResp    chan chan PassthruResp
+	pendingResp    chan *PassthruResp
 	underlyingConn net.Conn
 	bufIn          *bufio.Reader
 	bufOut         *bufio.Writer
 	l              *sync.Mutex
 }
 
-type PassthruResp struct {
-	Data []byte
-	Err  error
-}
-
 var crlf = []byte{byte('\r'), byte('\n')}
 
-func (p *PassthruConn) Command(cmd string, args [][]byte) (<-chan PassthruResp, error) {
+func (p *PassthruConn) Command(cmd string, args [][]byte) (*PassthruResp, error) {
 	p.l.Lock()
 	defer p.l.Unlock()
 
@@ -52,36 +63,38 @@ func (p *PassthruConn) Command(cmd string, args [][]byte) (<-chan PassthruResp, 
 	}
 
 	// flush command, register receive chan
-	receiver := make(chan PassthruResp, 1)
-	p.pendingResp <- receiver
-	return receiver, nil
+
+	ready := make(chan error)
+	done := make(chan error)
+	resp := &PassthruResp{ready, done, p}
+	p.pendingResp <- resp
+	return resp, nil
 }
 
 func (p *PassthruConn) routeResponses() {
-	var err error
+	defer p.underlyingConn.Close()
+	var err error = nil
+	// we iterate in a loop, signaling ready on one chan then blocking till done on the other
+	// actual pipelining of responses is done by the goroutine invoking WriteTo() on PassthruResp to send to the actual client,
 	for resp := range p.pendingResp {
-		// read from sock
-		line, err := p.bufIn.ReadBytes('\n')
+
+		//signal ready
+		resp.ready <- err
+		// wait done
+		err = <-resp.done
 		if err != nil {
-			resp <- PassthruResp{nil, err}
-			break //
-		}
-		//fmt.Printf("got response line: %s\n", string(line))
-		// forward on along
-		resp <- PassthruResp{line, nil}
-	}
-	if err != nil {
-		p.underlyingConn.Close()
-		//repeat error to all pending responses
-		for resp := range p.pendingResp {
-			resp <- PassthruResp{nil, err}
+			p.underlyingConn.Close()
+			close(p.pendingResp)
 		}
 	}
 }
 
 // writes and flushes command to specified bufio.Writer
 func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
+
+	// now process command
 	// we send an array of bulkstrings for the command
+	fmt.Printf("cmd writing array header\n")
 	n := len(args) + 1
 	err := out.WriteByte(byte('*'))
 	if err != nil {
@@ -96,6 +109,7 @@ func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
 		return err
 	}
 
+	fmt.Printf("cmd writing cmd name\n")
 	// write name
 	err = out.WriteByte(byte('$'))
 	if err != nil {
@@ -120,6 +134,7 @@ func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
 
 	// write each arg
 	for _, arg := range args {
+		fmt.Printf("cmd writing arg\n")
 		err = out.WriteByte(byte('$'))
 		if err != nil {
 			return err
@@ -142,10 +157,112 @@ func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
 		}
 	}
 	// final crlf
+	fmt.Printf("cmd writing final crlf\n")
 	_, err = out.Write(crlf)
 	if err != nil {
 		return err
 	}
 	return out.Flush()
 
+}
+
+type inAndErr struct {
+	in  *bufio.Reader
+	err error
+}
+type PassthruResp struct {
+	ready chan error
+	done  chan error
+	p     *PassthruConn
+}
+
+// Forwards a remote command to a client.
+func (p *PassthruResp) WriteTo(w io.Writer) (int64, error) {
+	// wait till our turn
+	err := <-p.ready
+	if err != nil {
+		fmt.Printf("passthru ERR! %s\n", err)
+		p.done <- err
+		return 0, err
+	}
+	fmt.Printf("Forwarding response for orig command\n")
+
+	// forward it along
+	written, err := forwardResponse(p.p.bufIn, w)
+	// signal done
+	p.done <- err
+	return int64(written), err
+}
+
+func forwardResponse(in *bufio.Reader, out io.Writer) (int, error) {
+	// read first byte
+	respType, err := in.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	// forward first byte
+	written, err := out.Write([]byte{respType})
+	if err != nil {
+		return written, err
+	}
+	// send rest of message
+	if respType == '+' || respType == ':' || respType == '-' {
+		// simple strings, ints and errors are just one line
+		w, err := fwdLine(in, out)
+		written += w
+		return written, err
+	} else if respType == '$' {
+		// bulk string, length on one line, then content on another
+		length, w, err := readFwdInt(in, out)
+		written += w
+		if err != nil {
+			return written, err
+		}
+
+		w2, err := io.CopyN(out, in, int64(length)+2) // + 2 to include final trailing \r\n
+		written += int(w2)
+		return written, err
+	} else if respType == '*' {
+		// array, num members on one line then N more full responses
+		numMembers, w, err := readFwdInt(in, out)
+		written += w
+		if err != nil {
+			return written, err
+		}
+		for i := 0; i < numMembers; i++ {
+			w, err = forwardResponse(in, out)
+			written += w
+			if err != nil {
+				return written, err
+			}
+		}
+		return written, nil
+	}
+	return written, err
+}
+
+func fwdLine(in *bufio.Reader, out io.Writer) (int, error) {
+	toFwd, err := in.ReadString('\n')
+	if err != nil {
+		return 1, err
+	}
+	written, err := out.Write([]byte(toFwd))
+	return written + 1, err
+}
+
+// reads an int from the rest of this line, while forwarding it all to client.  returns int, fwded, error
+func readFwdInt(in *bufio.Reader, out io.Writer) (int, int, error) {
+	lenString, err := in.ReadBytes('\n')
+	if err != nil {
+		return 0, 0, err
+	}
+	// forward with '\r\n'
+	w, err := out.Write(lenString)
+	if err != nil {
+		return 0, w, err
+	}
+	// pop off '\r\n' to convert to int
+	lenString = lenString[:len(lenString)-2]
+	length, err := strconv.Atoi(string(lenString))
+	return length, w, err
 }

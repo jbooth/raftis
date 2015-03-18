@@ -49,11 +49,12 @@ func TestDel(t *testing.T) {
 		t.Fatalf("Expecting Del to delete 1 key, deleted %d", del)
 	}
 
-	del, err = testcluster.clients[0].Del("delete_test1", "delete_test2", "delete_test3")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if del != 2 {
-		t.Fatalf("Expecting Del to delete 2 keys, deleted %d", del)
-	}
+	// we don't support multiple deletes
+	//del, err = testcluster.clients[0].Del("delete_test1", "delete_test2", "delete_test3")
+	//if err != nil {
+	//t.Fatal(err)
+	//}
+	//if del != 2 {
+	//t.Fatalf("Expecting Del to delete 2 keys, deleted %d", del)
+	//}
 }

@@ -30,28 +30,4 @@ func TestAppend(t *testing.T) {
 	if string(val) != "val1APPENDED" {
 		t.Fatalf("Expected [val1] for 'append_test', got [%s]", string(val))
 	}
-
-	//	// test some column PUTs and a get
-	//	http.Get("http://localhost:8001/putCols/table1/row1?col1=val1&col2=val2")
-	//	http.Get("http://localhost:8002/putCols/table1/row1?col3=val3&col4=val4")
-	//
-	//	row,err := http.Get("http://localHost:8003/getRow/table1/row1")
-	//	if err != nil {
-	//		t.Fatal(err)
-	//	}
-	//	fmt.Print(row)
-	//
-	//	// test get of bad key
-	//	row,err = http.Get("http://localHost:8003/getRow/table1/badrow")
-	//	if err != nil {
-	//		t.Fatal(err)
-	//	}
-	//	fmt.Print(row)
-
-	// shut'em down
-	//for i := 0; i < 3; i++ {
-	//fmt.Printf("Killing server %d\n", i)
-	//dbs[i].Close()
-	//}
-
 }
