@@ -13,15 +13,15 @@ type Conn struct {
 	syncRead bool
 }
 
-func NewConn(c net.Conn) Conn {
-	return Conn{c, false}
+func NewConn(c net.Conn) *Conn {
+	return &Conn{c, false}
 }
 
 type waiter interface {
 	waitDone()
 }
 
-func (conn Conn) serveClient(s *Server) (err error) {
+func (conn *Conn) serveClient(s *Server) (err error) {
 	responses := make(chan io.WriterTo, 32)
 	defer func() {
 		close(responses)
@@ -31,7 +31,7 @@ func (conn Conn) serveClient(s *Server) (err error) {
 	// read requests
 	for {
 		s.lg.Printf("conn parsing request")
-		request, err := redis.ParseRequest(conn)
+		request, err := redis.ParseRequest(conn, s.lg)
 		if err != nil {
 			return err
 		}

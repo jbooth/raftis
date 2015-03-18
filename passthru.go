@@ -14,10 +14,24 @@ func NewPassThru(remoteHost string) (*PassthruConn, error) {
 	if err != nil {
 		return nil, err
 	}
+	// go for sync mode
+	_, err = conn.Write([]byte("*1\r\n$8\r\nSYNCMODE\r\n"))
+	if err != nil {
+		return nil, fmt.Errorf("Error writing SYNCMODE establishing conn to %s", remoteHost)
+	}
+	in := bufio.NewReader(conn)
+	line, err := in.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("Error writing reading SYNCMODE resp while establishing conn to %s", remoteHost)
+	}
+	if line != "+OK\r\n" {
+		return nil, fmt.Errorf("Bad response when switching to SYNCMODE on conn to %s : %s", remoteHost, line)
+	}
+
 	ret := &PassthruConn{
 		make(chan *PassthruResp),
 		conn,
-		bufio.NewReader(conn),
+		in,
 		bufio.NewWriter(conn),
 		new(sync.Mutex),
 	}
@@ -77,16 +91,6 @@ func (p *PassthruConn) routeResponses() {
 
 // writes and flushes command to specified bufio.Writer
 func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
-	//fmt.Printf("cmd writing ping\n")
-	// first send a ping for consistency
-	//_, err := out.WriteString("PING")
-	//if err != nil {
-	//return err
-	//}
-	//_, err = out.Write(crlf)
-	//if err != nil {
-	//return err
-	//}
 
 	// now process command
 	// we send an array of bulkstrings for the command
@@ -181,13 +185,6 @@ func (p *PassthruResp) WriteTo(w io.Writer) (int64, error) {
 		p.done <- err
 		return 0, err
 	}
-	// pop off ping response "+PING\r\n"
-	//pong := make([]byte, 7)
-	//_, err = io.ReadFull(p.p.bufIn, pong)
-	//fmt.Printf("ping response: %s\n", string(pong))
-	//if err != nil {
-	//return 0, err
-	//}
 	fmt.Printf("Forwarding response for orig command\n")
 
 	// forward it along

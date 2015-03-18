@@ -79,6 +79,7 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 	defer c.l.RUnlock()
 	slot := c.slotForKey(key)
 	hosts, ok := c.slotHosts[slot]
+	c.lg.Printf("Choosing from hosts %+v for key %s slot %d", hosts, key, slot)
 	if !ok {
 		return nil, fmt.Errorf("No hosts configured for slot %d from key %s", slot, key)
 	}
