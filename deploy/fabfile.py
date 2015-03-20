@@ -111,16 +111,16 @@ def gen_raftis_config(me, slots="10", outfile=sys.stdout):
   slots = int(slots)
   nova = Client("1.1", **get_nova_creds())
 
-  hosts = sorted([{'RedisAddr': "{}:6379".format(host.metadata['fqdn']),
-                   'FlotillaAddr': "{}:1103".format(host.metadata['fqdn']),
-                   'Group': host.name.split('-')[2],
+  hosts = sorted([{'redisAddr': "{}:6379".format(host.metadata['fqdn']),
+                   'flotillaAddr': "{}:1103".format(host.metadata['fqdn']),
+                   'group': host.name.split('-')[2],
                    'shard': int(host.name.split('-')[1])}
                      for host in nova.servers.list()],
                  key=lambda host: host['shard'])
 
   cnt = Counter()
   for host in hosts:
-      cnt[host['Group']] += 1
+      cnt[host['group']] += 1
 
   if cnt.values().count(cnt.values()[0]) != len(cnt.values()):
       # I actually don't know how to handle fabric errors
@@ -132,23 +132,23 @@ def gen_raftis_config(me, slots="10", outfile=sys.stdout):
   shardscfg = [{} for _ in range(shards)]
   me_host = None 
   for host in hosts:
-    host_config = {'RedisAddr': host['RedisAddr'],
-       'FlotillaAddr': host['FlotillaAddr'],
-       'Group': host['Group']}
+    host_config = {'redisAddr': host['redisAddr'],
+       'flotillaAddr': host['flotillaAddr'],
+       'group': host['group']}
 
-    if me in host['RedisAddr']:
+    if me in host['redisAddr']:
         me_host = host_config
 
-    shardscfg[host['shard']].setdefault('Hosts', []). append(host_config)
+    shardscfg[host['shard']].setdefault('hosts', []). append(host_config)
 
     if 'slots' not in shardscfg[host['shard']]:
-        shardscfg[host['shard']]['Slots'] = range(
+        shardscfg[host['shard']]['slots'] = range(
           host['shard'], shards * slots, shards)
 
   raftiscfg = {
     "numSlots": shards * slots,
-    "Shards": shardscfg,
-    "Me": me_host
+    "shards": shardscfg,
+    "me": me_host
   }
 
   json.dump(raftiscfg, outfile)
