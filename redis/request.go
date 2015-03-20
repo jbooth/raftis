@@ -10,7 +10,7 @@ type Request struct {
 	Args       [][]byte
 	Host       string
 	ClientChan chan struct{}
-	Body       io.ReadCloser
+	Body       io.Reader
 }
 
 func (r *Request) HasArgument(index int) bool {
