@@ -13,6 +13,7 @@ import threading
 from fabric.decorators import hosts
 from fabric.api import task, env, sudo, puts, parallel
 from fabric.operations import put
+from fabric.context_managers import warn_only
 
 from novaclient.client import Client
 
@@ -83,16 +84,16 @@ def deploy():
 @parallel
 @hosts(raftis_cluster_hosts())
 def start():
-  sudo('start raftis')
+  with warn_only():
+    sudo('start raftis')
 
 @task
 @parallel
 @hosts(raftis_cluster_hosts())
 def stop():
-  from fabric.api import settings
   service_name = 'raftis'
 
-  with settings(warn_only=True):
+  with warn_only():
     res = sudo('service {} status | grep running'.format(service_name))
     if res.return_code == 0:
       sudo('stop {}'.format(service_name))
