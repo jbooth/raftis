@@ -1,6 +1,7 @@
 package raftis
 
 import (
+	"bufio"
 	redis "github.com/jbooth/raftis/redis"
 	rlog "github.com/jbooth/raftis/rlog"
 	"io"
@@ -28,10 +29,12 @@ func (conn *Conn) serveClient(s *Server) (err error) {
 	}()
 	// dispatch response writer
 	go sendResponses(responses, conn, s.lg)
+
+	connRead := bufio.NewReader(conn)
 	// read requests
 	for {
 		s.lg.Printf("conn parsing request")
-		request, err := redis.ParseRequest(conn, s.lg)
+		request, err := redis.ParseRequest(connRead, s.lg)
 		if err != nil {
 			return err
 		}
