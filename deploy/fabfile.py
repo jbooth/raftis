@@ -33,12 +33,13 @@ def get_nova_creds():
     d['api_key'] = os.environ['OS_PASSWORD']
     d['auth_url'] = os.environ['OS_AUTH_URL']
     d['project_id'] = os.environ['OS_TENANT_NAME']
+    d['region_name'] = os.environ['OS_REGION_NAME']
     return d
 
 
 
 def raftis_cluster_hosts():
-  nova = Client("1.1", **get_nova_creds())
+  nova = Client("2", **get_nova_creds())
   return [str(host.metadata['fqdn']) for host in nova.servers.list()]
 
 
@@ -109,7 +110,7 @@ def install():
 @hosts('localhost')
 def gen_raftis_config(me, slots="10", outfile=sys.stdout):
   slots = int(slots)
-  nova = Client("1.1", **get_nova_creds())
+  nova = Client("2", **get_nova_creds())
 
   hosts = sorted([{'redisAddr': "{}:6379".format(host.metadata['fqdn']),
                    'flotillaAddr': "{}:1103".format(host.metadata['fqdn']),
@@ -165,7 +166,7 @@ def cluster(shards=5, flavor='tiny', image=DEFAULT_IMAGE, key_name='raftis'):
       shard, width=len(str(shards)), datacenter=datacenter)
         for shard in range(shards) for datacenter in datacenters}
 
-  nova = Client("1.1", **get_nova_creds())
+  nova = Client("2", **get_nova_creds())
 
   if not nova.keypairs.findall(name=key_name):
     with open(os.path.expanduser('~/.ssh/id_rsa.pub')) as fpubkey:
