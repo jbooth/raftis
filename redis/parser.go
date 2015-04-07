@@ -3,6 +3,7 @@ package redis
 import (
 	"bufio"
 	"fmt"
+	log "github.com/jbooth/raftis/rlog"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -10,16 +11,20 @@ import (
 
 // redis parsing code courtesy of github.com/docker/go-redis-server
 
-func ParseRequest(conn io.ReadCloser) (*Request, error) {
-	r := bufio.NewReader(conn)
+func ParseRequest(r *bufio.Reader, lg *log.Logger) (*Request, error) {
 	// first line of redis request should be:
 	// *<number of arguments>CRLF
-	fmt.Printf("parser reading line to \\n\n")
+	lg.Printf("parser reading line to \\n\n")
 	line, err := r.ReadString('\n')
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("first line %s\n", line)
+	lg.Printf("first line %s\n", line)
+	for line == "\r\n" || line == "\n" {
+		lg.Printf("first line was empty, relooping")
+		line, err = r.ReadString('\n')
+		lg.Printf("first line %s\n", line)
+	}
 	// note that this line also protects us from negative integers
 	var argsCount int
 
@@ -28,31 +33,33 @@ func ParseRequest(conn io.ReadCloser) (*Request, error) {
 		if _, err := fmt.Sscanf(line, "*%d\r", &argsCount); err != nil {
 			return nil, malformed("*<numberOfArguments>", line)
 		}
-		fmt.Printf("argsCount: %d\n", argsCount)
+		lg.Printf("argsCount: %d\n", argsCount)
+		if argsCount == 0 {
+			return nil, fmt.Errorf("Client sent 0-arg request")
+		}
 		// All next lines are pairs of:
 		//$<number of bytes of argument 1> CR LF
 		//<argument data> CR LF
 		// first argument is a command name, so just convert
-		//fmt.Printf("Reading first argument\n")
+		//lg.Printf("Reading first argument\n")
 		firstArg, err := readArgument(r)
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf("firstArg %s\n", firstArg)
+		lg.Printf("firstArg %s\n", firstArg)
 
 		args := make([][]byte, argsCount-1)
 		for i := 0; i < argsCount-1; i += 1 {
-			//fmt.Printf("Reading %d argument\n", i)
+			lg.Printf("Reading %d argument\n", i)
 			if args[i], err = readArgument(r); err != nil {
 				return nil, err
 			}
-			fmt.Printf("Got %s for %d arg\n", args[i], i)
+			lg.Printf("Got %s for %d arg\n", args[i], i)
 		}
-
 		return &Request{
 			Name: strings.ToUpper(string(firstArg)),
 			Args: args,
-			Body: conn,
+			Body: r,
 		}, nil
 	}
 
@@ -68,7 +75,7 @@ func ParseRequest(conn io.ReadCloser) (*Request, error) {
 	return &Request{
 		Name: strings.ToLower(string(fields[0])),
 		Args: args,
-		Body: conn,
+		Body: r,
 	}, nil
 
 }
@@ -83,9 +90,10 @@ func readArgument(r *bufio.Reader) ([]byte, error) {
 	if _, err := fmt.Sscanf(line, "$%d\r", &argSize); err != nil {
 		return nil, malformed("$<argumentSize>", line)
 	}
+	if argSize == -1 {
+		return nil, nil
+	}
 
-	// I think int is safe here as the max length of request
-	// should be less then max int value?
 	data, err := ioutil.ReadAll(io.LimitReader(r, int64(argSize)))
 	if err != nil {
 		return nil, err

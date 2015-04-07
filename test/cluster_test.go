@@ -27,6 +27,10 @@ func TestCluster(t *testing.T) {
 	//time.Sleep(1 * time.Second)
 
 	for i := 1; i < 9; i++ {
+		err = testcluster.clients[i].Ping()
+		if err != nil {
+			t.Fatalf("Error pinging client %d : %s", i, err)
+		}
 		v, err := testcluster.clients[i].Get("foo")
 		if err != nil {
 			t.Fatalf("Error GETing from client %d : %s", i, err)

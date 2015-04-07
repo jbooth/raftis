@@ -12,8 +12,8 @@ func TestGetSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// put from server 2 to impose happens-before
-	err = testcluster.clients[1].Set("key2", "val2", 0, 0, false, false)
+	// ping server 2 to impose happens-before
+	err = testcluster.clients[1].Ping()
 	if err != nil {
 		t.Fatal(err)
 	}
