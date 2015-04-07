@@ -139,6 +139,26 @@ func NewNetworkTransport(
 	return trans
 }
 
+func NewNetworkTransportLog(
+	stream StreamLayer,
+	maxPool int,
+	timeout time.Duration,
+	logger *log.Logger,
+) *NetworkTransport {
+	trans := &NetworkTransport{
+		connPool:     make(map[string][]*netConn),
+		consumeCh:    make(chan RPC),
+		logger:       logger,
+		maxPool:      maxPool,
+		shutdownCh:   make(chan struct{}),
+		stream:       stream,
+		timeout:      timeout,
+		TimeoutScale: DefaultTimeoutScale,
+	}
+	go trans.listen()
+	return trans
+}
+
 // SetHeartbeatHandler is used to setup a heartbeat handler
 // as a fast-pass. This is to avoid head-of-line blocking from
 // disk IO.

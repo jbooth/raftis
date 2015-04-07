@@ -102,6 +102,34 @@ func NewFileSnapshotStore(base string, retain int, logOutput io.Writer) (*FileSn
 	return store, nil
 }
 
+// NewFileSnapshotStore creates a new FileSnapshotStore based
+// on a base directory. The `retain` parameter controls how many
+// snapshots are retained. Must be at least 1.
+func NewFileSnapshotStoreLog(base string, retain int, logger *log.Logger) (*FileSnapshotStore, error) {
+	if retain < 1 {
+		return nil, fmt.Errorf("must retain at least one snapshot")
+	}
+
+	// Ensure our path exists
+	path := filepath.Join(base, snapPath)
+	if err := os.MkdirAll(path, 0755); err != nil && !os.IsExist(err) {
+		return nil, fmt.Errorf("snapshot path not accessible: %v", err)
+	}
+
+	// Setup the store
+	store := &FileSnapshotStore{
+		path:   path,
+		retain: retain,
+		logger: logger,
+	}
+
+	// Do a permissions test
+	if err := store.testPermissions(); err != nil {
+		return nil, fmt.Errorf("permissions test failed: %v", err)
+	}
+	return store, nil
+}
+
 // testPermissions tries to touch a file in our path to see if it works
 func (f *FileSnapshotStore) testPermissions() error {
 	path := filepath.Join(f.path, testPath)

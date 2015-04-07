@@ -11,10 +11,6 @@
 			"Rev": "71c2886f5a673a35f909803f38ece5810165097b"
 		},
 		{
-			"ImportPath": "github.com/hashicorp/raft",
-			"Rev": "9ede2e87ca0ded646a8c8760116fcaac66564d7e"
-		},
-		{
 			"ImportPath": "github.com/jbooth/flotilla",
 			"Rev": "8ab640ba55f42e3b6742c161379e18b22fc6bc7e"
 		},
@@ -23,16 +19,16 @@
 			"Rev": "7b5526941fcbab72e5b314d166c75c1f74b59107"
 		},
 		{
+			"ImportPath": "github.com/jbooth/raft",
+			"Rev": "edfd672f61d6f38faeb7abdd0570803b647466c1"
+		},
+		{
 			"ImportPath": "github.com/jbooth/raft-mdb",
 			"Rev": "4aec21a232d3c56dc527465c30f3541cda719946"
 		},
 		{
 			"ImportPath": "github.com/ugorji/go/codec",
 			"Rev": "71c2886f5a673a35f909803f38ece5810165097b"
-		},
-		{
-			"ImportPath": "github.com/xuyu/goredis",
-			"Rev": "ca4609aa719e5e4823940f8704a36bd48a1d2f81"
 		}
 	]
 }

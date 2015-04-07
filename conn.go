@@ -31,7 +31,7 @@ func (conn *Conn) serveClient(s *Server) (err error) {
 	// read requests
 	for {
 		s.lg.Printf("conn parsing request")
-		request, err := redis.ParseRequest(conn, s.lg)
+		request, err := redis.ParseRequest(conn)
 		if err != nil {
 			return err
 		}

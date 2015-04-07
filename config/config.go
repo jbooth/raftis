@@ -13,14 +13,14 @@ type ClusterConfig struct {
 }
 
 type Shard struct {
-	Slots []uint32  `json:"slots"`
-	Hosts []Host    `json:"hosts"`
+	Slots []uint32 `json:"slots"`
+	Hosts []Host   `json:"hosts"`
 }
 
 type Host struct {
-	RedisAddr    string  `json:"redisAddr"`     // "192.168.0.4:8369"
-	FlotillaAddr string  `json:"flotillaAddr"`  // "192.168.0.4:1103"
-	Group        string  `json:"group"`
+	RedisAddr    string `json:"redisAddr"`    // "192.168.0.4:8369"
+	FlotillaAddr string `json:"flotillaAddr"` // "192.168.0.4:1103"
+	Group        string `json:"group"`
 }
 
 func WriteConfig(c *ClusterConfig, w io.Writer) error {
