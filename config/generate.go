@@ -1,5 +1,9 @@
 package config
 
+import (
+	"fmt"
+)
+
 func Singlenode(numShards int, hostsPerShard int) []ClusterConfig {
 	redisPort := 8697
 	flotilla := 1103
@@ -18,12 +22,12 @@ func Singlenode(numShards int, hostsPerShard int) []ClusterConfig {
 
 // builds a config for each host
 // hosts must contain the same number of hosts for each distinct group, we recommend 3 groups
-func AutoCluster(int numSlots, hosts []Host) []ClusterConfig {
+func AutoCluster(numSlots int, hosts []Host) []ClusterConfig {
 	if len(hosts) == 0 {
 		return make([]ClusterConfig, 0, 0)
 	}
 	// make sure we have exactly 1 in each replica set
-	countByGroup := make(map[string]uint)
+	countByGroup := make(map[string]int)
 	for _, h := range hosts {
 		prevCount, ok := countByGroup[h.Group]
 		if ok {
@@ -32,9 +36,9 @@ func AutoCluster(int numSlots, hosts []Host) []ClusterConfig {
 			countByGroup[h.Group] = 1
 		}
 	}
-	numGroups := len(countByGroup)
+	//numGroups := len(countByGroup)
 	countPerGroup := -1
-	for g, count := range countByGroup {
+	for _, count := range countByGroup {
 		if countPerGroup == -1 {
 			countPerGroup = count
 		} else {
@@ -45,10 +49,10 @@ func AutoCluster(int numSlots, hosts []Host) []ClusterConfig {
 	}
 
 	// split the hosts into shards
-	shards := make([]Shard, totalNumHosts/countPerGroup, totalNumHosts/countPerGroup)
+	shards := make([]Shard, len(hosts)/countPerGroup, len(hosts)/countPerGroup)
 	for i := 0; i < len(shards); i++ {
 		// figure out slots, any number in range numSlots % i == 0 is ours
-		mySlots := make([]uint32)
+		mySlots := make([]uint32, 0)
 		for slot := 0; slot < numSlots; slot++ {
 			if slot%i == 0 {
 				mySlots = append(mySlots, uint32(slot))
@@ -67,7 +71,7 @@ func AutoCluster(int numSlots, hosts []Host) []ClusterConfig {
 	// make a config for each host
 	ret := make([]ClusterConfig, len(hosts), len(hosts))
 	for i := 0; i < len(hosts); i++ {
-		ret[i] = ClusterConfig{numSlots, host, shards}
+		ret[i] = ClusterConfig{uint32(numSlots), hosts[i], shards}
 	}
 	return ret
 }
