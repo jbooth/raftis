@@ -26,6 +26,7 @@ func AutoCluster(numSlots int, hosts []Host) []ClusterConfig {
 	if len(hosts) == 0 {
 		return make([]ClusterConfig, 0, 0)
 	}
+	fmt.Printf("Building autocluster for hosts %+v\n", hosts)
 	// make sure we have exactly 1 in each replica set
 	countByGroup := make(map[string]int)
 	for _, h := range hosts {
@@ -36,6 +37,7 @@ func AutoCluster(numSlots int, hosts []Host) []ClusterConfig {
 			countByGroup[h.Group] = 1
 		}
 	}
+	fmt.Printf("Count by group %+v\n", countByGroup)
 	//numGroups := len(countByGroup)
 	countPerGroup := -1
 	for _, count := range countByGroup {
