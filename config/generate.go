@@ -8,13 +8,17 @@ func Singlenode(numShards int, hostsPerShard int) []ClusterConfig {
 	redisPort := 8697
 	flotilla := 1103
 	hosts := make([]Host, numShards*hostsPerShard)
+	var hIdx = 0
 	for s := 0; s < numShards; s++ {
 		for h := 0; h < hostsPerShard; h++ {
-			hosts[s*h+h] = Host{
+			hosts[hIdx] = Host{
 				RedisAddr:    fmt.Sprintf("127.0.0.1:%d", redisPort),
 				FlotillaAddr: fmt.Sprintf("127.0.0.1:%d", flotilla),
 				Group:        fmt.Sprintf("group%d", h),
 			}
+			redisPort++
+			flotilla++
+			hIdx++
 		}
 	}
 	return AutoCluster(100, hosts)
