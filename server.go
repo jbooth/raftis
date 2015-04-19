@@ -107,7 +107,6 @@ type Server struct {
 }
 
 func NewServer(c *config.ClusterConfig,
-	dataDir string,
 	debugLogging bool) (*Server, error) {
 
 	lg := log.New(
@@ -148,7 +147,7 @@ func NewServer(c *config.ClusterConfig,
 	}
 	f, err := flotilla.NewDB(
 		flotillaPeers,
-		dataDir,
+		c.Datadir,
 		flotillaListen, dialer.Dial, writeOps, lg.WrappedLogger.Logger)
 
 	if err != nil {

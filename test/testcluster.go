@@ -98,10 +98,11 @@ func setupTest() {
 				cfg := &config.ClusterConfig{
 					NumSlots: uint32(10),
 					Me:       testcluster.hosts[j],
+					Datadir:  testcluster.homeDirs[j],
 					Shards:   shardsForConfig,
 				}
 				testcluster.dbs[j], err = raftis.NewServer(
-          cfg, testcluster.homeDirs[j], debugLogging)
+					cfg, debugLogging)
 
 				if err != nil {
 					panic(err)

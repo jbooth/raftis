@@ -2,12 +2,14 @@ package config
 
 import (
 	"fmt"
+	"os"
 )
 
-func Singlenode(numShards int, hostsPerShard int) []ClusterConfig {
-	redisPort := 8697
+func Singlenode(numShards int, hostsPerShard int, dataRoot string) []ClusterConfig {
+	redisPort := 8679
 	flotilla := 1103
 	hosts := make([]Host, numShards*hostsPerShard)
+	dataDirs := make([]string, numShards*hostsPerShard)
 	var hIdx = 0
 	for s := 0; s < numShards; s++ {
 		for h := 0; h < hostsPerShard; h++ {
@@ -16,17 +18,20 @@ func Singlenode(numShards int, hostsPerShard int) []ClusterConfig {
 				FlotillaAddr: fmt.Sprintf("127.0.0.1:%d", flotilla),
 				Group:        fmt.Sprintf("group%d", h),
 			}
+			dataDirs[hIdx] = fmt.Sprintf("%s/%d", dataRoot, redisPort)
+			os.MkdirAll(dataDirs[hIdx], 0777)
 			redisPort++
 			flotilla++
 			hIdx++
 		}
 	}
-	return AutoCluster(100, hosts)
+	return AutoCluster(100, hosts, dataDirs)
 }
 
 // builds a config for each host
-// hosts must contain the same number of hosts for each distinct group, we recommend 3 groups
-func AutoCluster(numSlots int, hosts []Host) []ClusterConfig {
+// hosts must contain the same number of hosts for each distinct group, i.e., len(hosts) % numDistinctGroups == 0 must hold true.
+// We recommend 3 groups and len(hosts) % 3 == 0
+func AutoCluster(numSlots int, hosts []Host, dataDirs []string) []ClusterConfig {
 	if len(hosts) == 0 {
 		return make([]ClusterConfig, 0, 0)
 	}
@@ -60,14 +65,14 @@ func AutoCluster(numSlots int, hosts []Host) []ClusterConfig {
 		// figure out slots, any number in range numSlots % i == 0 is ours
 		mySlots := make([]uint32, 0)
 		for slot := 0; slot < numSlots; slot++ {
-			fmt.Printf("i: %d slot %d\n",i,slot)
+			fmt.Printf("i: %d slot %d\n", i, slot)
 			//if (i == 0 && slot == 0) || (i != 0 && slot%i == 0) {
-			if slot % len(shards) == i {
+			if slot%len(shards) == i {
 				mySlots = append(mySlots, uint32(slot))
 			}
 		}
 		// identify our hosts
-		myHosts := make([]Host, countPerGroup)
+		myHosts := make([]Host, 0, 0)
 		for idx, h := range hosts {
 			// if same modulo as us, our shard
 			if idx%len(shards) == i%len(shards) {
@@ -79,7 +84,12 @@ func AutoCluster(numSlots int, hosts []Host) []ClusterConfig {
 	// make a config for each host
 	ret := make([]ClusterConfig, len(hosts), len(hosts))
 	for i := 0; i < len(hosts); i++ {
-		ret[i] = ClusterConfig{uint32(numSlots), hosts[i], shards}
+		ret[i] = ClusterConfig{
+			NumSlots: uint32(numSlots),
+			Me:       hosts[i],
+			Datadir:  dataDirs[i],
+			Shards:   shards,
+		}
 	}
 	return ret
 }

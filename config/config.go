@@ -8,8 +8,9 @@ import (
 
 type ClusterConfig struct {
 	NumSlots uint32  `json:"numSlots"`
-	Me       Host    `json:"me"` // should match a host in one of our shards exactly to identify which peergroup we join
-	Shards   []Shard `json:"shards"`
+	Me       Host    `json:"me"`      // should match a host in one of our shards exactly to identify which peergroup we join
+	Datadir  string  `json:"dataDir"` // local data directory
+	Shards   []Shard `json:"shards"`  // defines topography of cluster
 }
 
 type Shard struct {
