@@ -73,11 +73,9 @@ func AutoCluster(numSlots int, hosts []Host, dataDirs []string) []ClusterConfig 
 		}
 		// identify our hosts
 		myHosts := make([]Host, 0, 0)
-		for idx, h := range hosts {
-			// if same modulo as us, our shard
-			if idx%len(shards) == i%len(shards) {
-				myHosts = append(myHosts, h)
-			}
+		shardStartIdx := i * countPerGroup
+		for h := shardStartIdx; h < shardStartIdx+countPerGroup; h++ {
+			myHosts = append(myHosts, hosts[h])
 		}
 		shards[i] = Shard{mySlots, myHosts}
 	}
