@@ -14,16 +14,12 @@ import (
 func ParseRequest(r *bufio.Reader, lg *log.Logger) (*Request, error) {
 	// first line of redis request should be:
 	// *<number of arguments>CRLF
-	lg.Printf("parser reading line to \\n\n")
 	line, err := r.ReadString('\n')
 	if err != nil {
 		return nil, err
 	}
-	lg.Printf("first line %s\n", line)
 	for line == "\r\n" || line == "\n" {
-		lg.Printf("first line was empty, relooping")
 		line, err = r.ReadString('\n')
-		lg.Printf("first line %s\n", line)
 	}
 	// note that this line also protects us from negative integers
 	var argsCount int
@@ -33,7 +29,6 @@ func ParseRequest(r *bufio.Reader, lg *log.Logger) (*Request, error) {
 		if _, err := fmt.Sscanf(line, "*%d\r", &argsCount); err != nil {
 			return nil, malformed("*<numberOfArguments>", line)
 		}
-		lg.Printf("argsCount: %d\n", argsCount)
 		if argsCount == 0 {
 			return nil, fmt.Errorf("Client sent 0-arg request")
 		}
@@ -41,20 +36,16 @@ func ParseRequest(r *bufio.Reader, lg *log.Logger) (*Request, error) {
 		//$<number of bytes of argument 1> CR LF
 		//<argument data> CR LF
 		// first argument is a command name, so just convert
-		//lg.Printf("Reading first argument\n")
 		firstArg, err := readArgument(r)
 		if err != nil {
 			return nil, err
 		}
-		lg.Printf("firstArg %s\n", firstArg)
 
 		args := make([][]byte, argsCount-1)
 		for i := 0; i < argsCount-1; i += 1 {
-			lg.Printf("Reading %d argument\n", i)
 			if args[i], err = readArgument(r); err != nil {
 				return nil, err
 			}
-			lg.Printf("Got %s for %d arg\n", args[i], i)
 		}
 		return &Request{
 			Name: strings.ToUpper(string(firstArg)),

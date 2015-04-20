@@ -235,7 +235,6 @@ func (s *Server) doRequest(c *Conn, r *redis.Request) io.WriterTo {
 		return redis.NewError(fmt.Sprintf("error checking key status for key %s : %s", keyStr, err))
 	}
 	if !hasKey {
-		s.lg.Printf("Not local for key, forwarding")
 		// we don't have key locally, forward to correct node
 		fwd, err := s.cluster.ForwardCommand(r.Name, r.Args)
 		if err != nil {
@@ -243,7 +242,6 @@ func (s *Server) doRequest(c *Conn, r *redis.Request) io.WriterTo {
 		}
 		return fwd
 	}
-	s.lg.Printf("Local for key processing")
 	// have the key locally, apply command or execute read
 	_, ok = writeOps[r.Name]
 	if ok {
@@ -297,12 +295,10 @@ type pendingSyncRead struct {
 
 func (p pendingSyncRead) WriteTo(w io.Writer) (int64, error) {
 	// wait for no-op to sync
-	p.r.s.lg.Printf("syncRead waiting on noopResp\n")
 	noopResp := <-p.noop
 	if noopResp.Err != nil {
 		return redis.NewError(noopResp.Err.Error()).WriteTo(w)
 	}
-	fmt.Printf("syncRead got noopResp, executing read\n")
 	// handle as normal read
 	return p.r.WriteTo(w)
 }

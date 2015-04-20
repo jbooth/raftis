@@ -79,7 +79,7 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 	defer c.l.RUnlock()
 	slot := c.slotForKey(key)
 	hosts, ok := c.slotHosts[slot]
-	c.lg.Printf("Choosing from hosts %+v for key %s slot %d", hosts, key, slot)
+	//c.lg.Printf("Choosing from hosts %+v for key %s slot %d", hosts, key, slot)
 	if !ok {
 		return nil, fmt.Errorf("No hosts configured for slot %d from key %s", slot, key)
 	}
@@ -94,10 +94,10 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 	sameGroup, hasSameGroup := hostsByGroup[c.c.Me.Group]
 	var err error
 	if hasSameGroup {
-		c.lg.Printf("Connecting to host from same group %+v", sameGroup)
+		//c.lg.Printf("Connecting to host from same group %+v", sameGroup)
 		sameGroupConn, err := c.getConnForHost(sameGroup.RedisAddr)
 		if err == nil {
-			c.lg.Printf("returning from same group")
+			//c.lg.Printf("returning from same group")
 			return sameGroupConn, nil
 		} else {
 			c.lg.Errorf("Error connecting to host %s for slot %d : %s", sameGroup.RedisAddr, slot, err.Error())

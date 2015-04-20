@@ -94,7 +94,6 @@ func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
 
 	// now process command
 	// we send an array of bulkstrings for the command
-	fmt.Printf("cmd writing array header\n")
 	n := len(args) + 1
 	err := out.WriteByte(byte('*'))
 	if err != nil {
@@ -109,7 +108,6 @@ func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
 		return err
 	}
 
-	fmt.Printf("cmd writing cmd name\n")
 	// write name
 	err = out.WriteByte(byte('$'))
 	if err != nil {
@@ -134,7 +132,6 @@ func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
 
 	// write each arg
 	for _, arg := range args {
-		fmt.Printf("cmd writing arg\n")
 		err = out.WriteByte(byte('$'))
 		if err != nil {
 			return err
@@ -157,7 +154,6 @@ func writeCmd(cmd string, args [][]byte, out *bufio.Writer) error {
 		}
 	}
 	// final crlf
-	fmt.Printf("cmd writing final crlf\n")
 	_, err = out.Write(crlf)
 	if err != nil {
 		return err
@@ -185,7 +181,6 @@ func (p *PassthruResp) WriteTo(w io.Writer) (int64, error) {
 		p.done <- err
 		return 0, err
 	}
-	fmt.Printf("Forwarding response for orig command\n")
 
 	// forward it along
 	written, err := forwardResponse(p.p.bufIn, w)
