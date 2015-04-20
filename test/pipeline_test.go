@@ -14,12 +14,10 @@ func TestPipeline(t *testing.T) {
 	requests := packCommand("SET", "FOO", "BAR")
 	requests = append(requests, packCommand("SET", "BAR", "FOO")...)
 	requests = append(requests, packCommand("SET", "BAZ", "BAZ")...)
-	requests = append(requests, packCommand("SET", "BAA", "BAA")...)
 	requests = append(requests, packCommand("GET", "FOO")...)
 	requests = append(requests, packCommand("GET", "BAR")...)
 	requests = append(requests, packCommand("SET", "BAB", "BAA")...)
 	requests = append(requests, packCommand("GET", "BAB")...)
-	requests = append(requests, packCommand("GET", "BAA")...)
 
 	targetAddr := testcluster.hosts[0].RedisAddr
 	conn, err := net.Dial("tcp", targetAddr)
@@ -29,11 +27,14 @@ func TestPipeline(t *testing.T) {
 
 	conn.Write(requests)
 
-	expectedResponse := "+OK\r\n+OK\r\n+OK\r\n$3\r\nBAR\r\n$3\r\nFOO\r\n+OK\r\n$3\r\nFOO\r\n+OK\r\n+OK\r\n"
+	expectedResponse := "+OK\r\n+OK\r\n+OK\r\n$3\r\nBAR\r\n$3\r\nFOO\r\n+OK\r\n$3\r\nBAA\r\n"
 	respBuff := make([]byte, len(expectedResponse), len(expectedResponse))
 	_, err = io.ReadFull(conn, respBuff)
 	if err != nil {
 		panic(err)
+	}
+	if expectedResponse != string(respBuff) {
+		t.Fatalf("Expected response %s, got %s", expectedResponse, respBuff)
 	}
 	fmt.Println(string(respBuff))
 }
