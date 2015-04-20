@@ -10,6 +10,7 @@ import (
 
 func TestPipeline(t *testing.T) {
 	setupTest()
+	fmt.Println("Starting pipeline test")
 	requests := packCommand("SET", "FOO", "BAR")
 	requests = append(requests, packCommand("SET", "BAR", "FOO")...)
 	requests = append(requests, packCommand("SET", "BAZ", "BAZ")...)
