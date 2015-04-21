@@ -2,8 +2,17 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"github.com/jbooth/raftis"
 	"github.com/jbooth/raftis/config"
+	"log"
+	"net"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
 )
 
 var debugLogging bool
@@ -17,6 +26,7 @@ func init() {
 }
 
 func main() {
+
 	if configfile == "" {
 		panic("Can't go anywhere without a config file")
 	}
@@ -25,6 +35,15 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	// TODO erase this, only here for pprof webserver
+	_, redisPortStr, _ := net.SplitHostPort(cfg.Me.RedisAddr)
+	redisPort, _ := strconv.Atoi(redisPortStr)
+
+	runtime.SetBlockProfileRate(1)
+	go func() {
+
+		log.Println(http.ListenAndServe(fmt.Sprintf("localhost:%d", redisPort+1000), nil))
+	}()
 
 	serve, err := raftis.NewServer(
 		cfg,
@@ -33,5 +52,33 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	serve.Serve()
+
+	errChan := make(chan error)
+	// spin off server
+	go func() {
+		errChan <- serve.Serve()
+	}()
+
+	// spin off signal handler
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGPIPE, syscall.SIGHUP)
+	go func() {
+		for {
+			s := <-sig
+			if s == syscall.SIGPIPE {
+				fmt.Println("Got sigpipe!")
+			} else {
+				// silent quit for other signals
+				errChan <- nil
+				return
+			}
+		}
+	}()
+
+	// wait for something to come from either signal handler or the mountpoint, unmount and blow up safely
+	err = <-errChan
+	fmt.Println("Shutting down..")
+	if err != nil {
+		panic(err)
+	}
 }
