@@ -67,8 +67,19 @@ func (p *PassthruConn) Command(cmd string, args [][]byte) (*PassthruResp, error)
 	ready := make(chan error)
 	done := make(chan error)
 	resp := &PassthruResp{ready, done, p}
-	p.pendingResp <- resp
-	return resp, nil
+	err = sendCatch(p.pendingResp, resp)
+	return resp, err
+}
+
+func sendCatch(s chan *PassthruResp, p *PassthruResp) (err error) {
+	defer func() {
+		if x := recover(); x != nil {
+			err = fmt.Errorf("%v", x)
+		}
+	}()
+	err = nil
+	s <- p
+	return
 }
 
 func (p *PassthruConn) routeResponses() {
