@@ -65,8 +65,6 @@ func AutoCluster(numSlots int, hosts []Host, dataDirs []string) []ClusterConfig 
 		// figure out slots, any number in range numSlots % i == 0 is ours
 		mySlots := make([]uint32, 0)
 		for slot := 0; slot < numSlots; slot++ {
-			fmt.Printf("i: %d slot %d\n", i, slot)
-			//if (i == 0 && slot == 0) || (i != 0 && slot%i == 0) {
 			if slot%len(shards) == i {
 				mySlots = append(mySlots, uint32(slot))
 			}
