@@ -3,7 +3,6 @@ package raftis
 import (
 	"bufio"
 	redis "github.com/jbooth/raftis/redis"
-	rlog "github.com/jbooth/raftis/rlog"
 	"io"
 	"net"
 	"strings"
@@ -28,7 +27,7 @@ func (conn *Conn) serveClient(s *Server) (err error) {
 		close(responses)
 	}()
 	// dispatch response writer
-	go sendResponses(responses, conn, s.lg)
+	go sendResponses(responses, conn, s)
 
 	connRead := bufio.NewReader(conn)
 	// read requests
@@ -55,12 +54,41 @@ func (conn *Conn) serveClient(s *Server) (err error) {
 	return nil
 }
 
-func sendResponses(resps chan io.WriterTo, conn net.Conn, lg *rlog.Logger) {
+func sendResponses(resps chan io.WriterTo, conn net.Conn, s *Server) {
 	defer conn.Close()
+	var n int64 = 0
+	var dirty bool = false
+	txn, err := s.flotilla.Read()
+	defer txn.Abort()
+	if err != nil {
+		// TODO write err to client
+		s.lg.Printf("ERROR getting initial transaction for reads: %s", err.Error())
+		return
+	}
 	for r := range resps {
-		n, err := r.WriteTo(conn)
+		tr, isRead := r.(txnReader)
+		if isRead {
+			// only renew our TXN handle if dirty, otherwise just reuse and save some calls
+			if dirty {
+				err = txn.Renew()
+				if err != nil {
+					s.lg.Printf("ERROR renewing txn on dirty read: %s", err.Error())
+					// TODO write err to client
+					return
+				}
+				dirty = false
+			}
+			// txn handle was either recycled or renewed, execute the read
+			n, err = tr.WriteTxnTo(txn, conn)
+		} else {
+			// write or administrative command, mark existing read-handle dirty and handle thru WriterTo interface
+			dirty = true
+			txn.Reset()
+			n, err = r.WriteTo(conn)
+		}
 		if err != nil {
-			lg.Printf("Error writing to %s, closing.. wrote %d bytes, err: %s", conn.RemoteAddr().String(), n, err)
+			s.lg.Printf("Error writing to %s, closing.. wrote %d bytes, err: %s", conn.RemoteAddr().String(), n, err)
+			// TODO write err to client?  already broken
 			return
 		}
 	}

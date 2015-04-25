@@ -273,19 +273,26 @@ func (p pendingWrite) WriteTo(w io.Writer) (int64, error) {
 	return int64(n), err
 }
 
+type txnReader interface {
+	WriteTxnTo(t *mdb.Txn, w io.Writer) (int64, error)
+}
+
 type pendingRead struct {
 	op   readOp
 	args [][]byte
 	s    *Server
 }
 
+func (p pendingRead) WriteTxnTo(t *mdb.Txn, w io.Writer) (int64, error) {
+	return p.op(p.args, t, w)
+}
 func (p pendingRead) WriteTo(w io.Writer) (int64, error) {
 	txn, err := p.s.flotilla.Read()
 	if err != nil {
 		return redis.NewError(err.Error()).WriteTo(w)
 	}
 	defer txn.Abort()
-	return p.op(p.args, txn, w)
+	return p.WriteTxnTo(txn, w)
 }
 
 type pendingSyncRead struct {
@@ -293,6 +300,15 @@ type pendingSyncRead struct {
 	r    pendingRead
 }
 
+func (p pendingSyncRead) WriteTxnTo(t *mdb.Txn, w io.Writer) (int64, error) {
+	// wait for no-op to sync
+	noopResp := <-p.noop
+	if noopResp.Err != nil {
+		return redis.NewError(noopResp.Err.Error()).WriteTo(w)
+	}
+	// handle as normal read
+	return p.r.WriteTxnTo(t, w)
+}
 func (p pendingSyncRead) WriteTo(w io.Writer) (int64, error) {
 	// wait for no-op to sync
 	noopResp := <-p.noop
