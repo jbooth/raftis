@@ -5,13 +5,9 @@ import (
 	"fmt"
 	"github.com/jbooth/raftis"
 	"github.com/jbooth/raftis/config"
-	"log"
-	"net"
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 )
 
@@ -35,16 +31,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// TODO erase this, only here for pprof webserver
-	_, redisPortStr, _ := net.SplitHostPort(cfg.Me.RedisAddr)
-	redisPort, _ := strconv.Atoi(redisPortStr)
-
-	runtime.SetBlockProfileRate(1)
-	go func() {
-
-		log.Println(http.ListenAndServe(fmt.Sprintf("localhost:%d", redisPort+1000), nil))
-	}()
-
 	serve, err := raftis.NewServer(
 		cfg,
 		debugLogging)
