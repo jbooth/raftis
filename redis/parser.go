@@ -18,7 +18,7 @@ func ParseRequest(r *bufio.Reader, lg *log.Logger) (*Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	for line == "\r\n" || line == "\n" {
+	for line == "\r\n" || line == "\n" || line == "" {
 		line, err = r.ReadString('\n')
 	}
 	// note that this line also protects us from negative integers
