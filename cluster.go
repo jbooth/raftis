@@ -88,7 +88,7 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 		if host.RedisAddr == c.c.Me.RedisAddr {
 			return nil, fmt.Errorf("Can't passthru to localhost!  Use the right interface.")
 		}
-		hostsByGroup[host.RedisAddr] = host
+		hostsByGroup[host.Group] = host
 	}
 	// try to favor same group
 	sameGroup, hasSameGroup := hostsByGroup[c.c.Me.Group]
@@ -148,7 +148,8 @@ func (c *ClusterMember) slotForKey(key []byte) int32 {
 	if h < 0 {
 		h = -h
 	}
-	return h % int32(c.c.NumSlots)
+	ret := h % int32(c.c.NumSlots)
+	return ret
 }
 
 func hash(key []byte) int32 {
