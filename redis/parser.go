@@ -11,7 +11,19 @@ import (
 
 // redis parsing code courtesy of github.com/docker/go-redis-server
 
-func ParseRequest(r *bufio.Reader, lg *log.Logger) (*Request, error) {
+func ParseRequest(r *bufio.Reader, lg *log.Logger) (req *Request, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Error parsing command: %s.  Closing connection", r)
+			req = &Request{
+				Name: "fatal",
+				Args: [][]byte{[]byte(fmt.Sprintf("%s", r))},
+				Body: nil,
+			}
+
+			return
+		}
+	}()
 	// first line of redis request should be:
 	// *<number of arguments>CRLF
 	line, err := r.ReadString('\n')
@@ -63,12 +75,13 @@ func ParseRequest(r *bufio.Reader, lg *log.Logger) (*Request, error) {
 			args = append(args, []byte(arg))
 		}
 	}
-	return &Request{
+	req = &Request{
 		Name: strings.ToLower(string(fields[0])),
 		Args: args,
 		Body: r,
-	}, nil
-
+	}
+	err = nil
+	return
 }
 
 func readArgument(r *bufio.Reader) ([]byte, error) {

@@ -37,3 +37,11 @@ func (er *ErrorReply) Error() string {
 func NewError(message string) *ErrorReply {
 	return &ErrorReply{Code: "ERROR", Message: message}
 }
+
+type FatalReply struct {
+	*ErrorReply
+}
+
+func NewFatal(message string) *FatalReply {
+	return &FatalReply{NewError(message)}
+}

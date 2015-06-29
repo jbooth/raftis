@@ -96,6 +96,7 @@ var (
 		"CONFIG":     handleConfig,
 		"SYNCMODE":   dosync,
 		"NOSYNCMODE": donosync,
+		"FATAL":      fatal,
 	}
 )
 
@@ -202,6 +203,7 @@ var get []byte = []byte("GET")
 
 func (s *Server) doRequest(c *Conn, r *redis.Request) io.WriterTo {
 
+	// config is special cased because not a cluster op
 	if r.Name == "CONFIG" &&
 		len(r.Args) > 0 &&
 		strings.ToUpper(string(r.Args[0])) == "GET" {
@@ -353,4 +355,11 @@ func dosync(args [][]byte, c *Conn, s *Server) io.WriterTo {
 func donosync(args [][]byte, c *Conn, s *Server) io.WriterTo {
 	c.syncRead = false
 	return &redis.StatusReply{"OK"}
+}
+
+func fatal(args [][]byte, c *Conn, s *Server) io.WriterTo {
+	if len(args) == 0 {
+		return redis.NewFatal("FATAL!  No msg")
+	}
+	return redis.NewFatal(string(args[0]))
 }

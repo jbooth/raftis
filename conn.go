@@ -85,6 +85,10 @@ func sendResponses(resps chan io.WriterTo, conn net.Conn, s *Server) {
 			dirty = true
 			txn.Reset()
 			n, err = r.WriteTo(conn)
+			_, isFatal := r.(redis.FatalReply)
+			if isFatal {
+				return // defer will close
+			}
 		}
 		if err != nil {
 			s.lg.Printf("Error writing to %s, closing.. wrote %d bytes, err: %s", conn.RemoteAddr().String(), n, err)
