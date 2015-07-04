@@ -6,17 +6,30 @@ import (
 	log "github.com/jbooth/raftis/rlog"
 	"io"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 func NewClusterMember(c *config.ClusterConfig, lg *log.Logger) (*ClusterMember, error) {
+	// just set up hostConns all at once for now
 	slotHosts := make(map[int32][]config.Host)
 	for _, shard := range c.Shards {
 		for _, slot := range shard.Slots {
 			slotHosts[int32(slot)] = shard.Hosts
 		}
 	}
-	// just set up hostConns all at once for now
-	hostConns := make(map[string]*PassthruConn)
+	hostConns := make(map[string]hostConn)
+	for _, shard := range c.Shards {
+		for _, host := range shard.Hosts {
+			var err error = nil
+			hostConns[host], err = newHostConn(host)
+			if err != nil {
+				hostConns[host].markErr()
+				lg.Printf("Error initially connecting to %s : %s", host, err)
+			}
+		}
+	}
+	conn, err := NewPassThru(host)
 	return &ClusterMember{
 		lg,
 		&sync.RWMutex{},
@@ -32,7 +45,40 @@ type ClusterMember struct {
 	l         *sync.RWMutex
 	c         *config.ClusterConfig
 	slotHosts map[int32][]config.Host
-	hostConns map[string]*PassthruConn // for forwarding commands when we don't have a key
+	hostConns map[string]*hostConn
+}
+
+type hostConn struct {
+	p           *PassthruConn
+	host        string
+	lastErrTime *int64
+}
+
+func (h *hostConn) lastErrTime() int64 {
+	return atomic.LoadInt64(h.lastErrTime)
+}
+
+func (h *hostConn) markErr() {
+	atomic.StoreInt64(h.lastErrTime, time.Now().Unix())
+	h.p.Close()
+}
+
+// should hold cluster writelock while calling this to insure visibility
+func (h *hostConn) renew() (err error) {
+	h.p, err = NewPassThru(h.host)
+	if err != nil {
+		h.lastErrTime = 0
+	} else {
+		h.lastErrTime = time.Unix().Now()
+	}
+}
+
+func newHostConn(host string) (*hostConn, err) {
+	p, err := NewPassThru(host)
+	if err != nil {
+		return nil, err
+	}
+	return &hostConn{p, host, -1}
 }
 
 func (c *ClusterMember) HasKey(cmdName string, args [][]byte) (bool, error) {
@@ -94,6 +140,10 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 	sameGroup, hasSameGroup := hostsByGroup[c.c.Me.Group]
 	var err error
 	if hasSameGroup {
+		hostConn := c.hostConns[host]
+		if hostConn != nil {
+
+		}
 		//c.lg.Printf("Connecting to host from same group %+v", sameGroup)
 		sameGroupConn, err := c.getConnForHost(sameGroup.RedisAddr)
 		if err == nil {
@@ -120,6 +170,12 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 func (c *ClusterMember) getConnForHost(host string) (*PassthruConn, error) {
 	conn, ok := c.hostConns[host]
 	if ok {
+		lastErrTime := conn.lastErrTime()
+		if lastErrTime > 0 {
+			// if older than 5 minutes renew
+
+			// if not, return error
+		}
 		return conn, nil
 	}
 	// switch to writelock

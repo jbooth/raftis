@@ -49,6 +49,7 @@ type PassthruConn struct {
 	bufIn          *bufio.Reader
 	bufOut         *bufio.Writer
 	l              *sync.Mutex
+	closed         bool
 }
 
 var crlf = []byte{byte('\r'), byte('\n')}
@@ -56,6 +57,9 @@ var crlf = []byte{byte('\r'), byte('\n')}
 func (p *PassthruConn) Command(cmd string, args [][]byte) (*PassthruResp, error) {
 	p.l.Lock()
 	defer p.l.Unlock()
+	if p.closed {
+		return nil, fmt.Errorf("Connection closed!")
+	}
 
 	err := writeCmd(cmd, args, p.bufOut)
 	if err != nil {
@@ -94,10 +98,17 @@ func (p *PassthruConn) routeResponses() {
 		// wait done
 		err = <-resp.done
 		if err != nil {
-			p.underlyingConn.Close()
-			close(p.pendingResp)
+			p.Close()
 		}
 	}
+}
+
+func (p *PassthruConn) Close() {
+	p.l.Lock()
+	defer p.l.Unlock()
+	close(p.pendingResp)
+	p.underlyingConn.Close()
+	p.closed = true
 }
 
 // writes and flushes command to specified bufio.Writer
