@@ -150,7 +150,9 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 			//c.lg.Printf("returning from same group")
 			return sameGroupConn, nil
 		} else {
-			c.lg.Errorf("Error connecting to host %s for slot %d : %s", sameGroup.RedisAddr, slot, err.Error())
+			if err != hostMarkedDown {
+				c.lg.Errorf("Error connecting to host %s for slot %d : %s", sameGroup.RedisAddr, slot, err.Error())
+			}
 		}
 	}
 	// otherwise, randomly iterate till we find one that works
@@ -159,43 +161,46 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 		if err == nil {
 			return conn, nil
 		} else {
-			c.lg.Errorf("Error connecting to host %+v for slot %d : %s", h, slot, err)
+			if err != hostMarkedDown {
+				c.lg.Errorf("Error connecting to host %+v for slot %d : %s", h, slot, err)
+			}
 		}
 	}
 	return nil, fmt.Errorf("Couldn't find any hosts up for slot %d, key %s, hosts are %+v, error from last connect attempt: %s", slot, key, hosts, err)
 
 }
 
-// assumes Rlock is held
+var hostMarkedDown error = fmt.Errorf("Host down")
+
+// assumes Rlock is held, returns error if this host is marked down
 func (c *ClusterMember) getConnForHost(host string) (*PassthruConn, error) {
 	conn, ok := c.hostConns[host]
 	if ok {
 		lastErrTime := conn.lastErrTime()
 		if lastErrTime > 0 {
-			// if older than 5 minutes renew
+			if time.Now().Unix()-lastErrTime > 360 {
+				// if older than 5 minutes renew
+				// switch to writelock
+				c.l.RUnlock()
+				c.l.Lock()
+				defer func() {
+					c.l.Unlock()
+					c.l.RLock()
+				}()
+				// double check after writelock
+				if time.Now().Unix()-conn.lastErrTime() > 0 {
+					conn.renew()
+				}
+				return conn, nil
+			} else {
+				// if not, return error
+				return nil, hostMarkedDown
+			}
 
-			// if not, return error
 		}
 		return conn, nil
-	}
-	// switch to writelock
-	c.l.RUnlock()
-	c.l.Lock()
-	defer func() {
-		c.l.Unlock()
-		c.l.RLock()
-	}()
-	// doublecheck after writelocking
-	conn, ok = c.hostConns[host]
-	if ok {
-		return conn, nil
-	}
-	conn, err := NewPassThru(host)
-	if err == nil {
-		c.hostConns[host] = conn
-		return conn, nil
 	} else {
-		return nil, err
+		return nil, fmt.Errorf("No conn identified for host %s")
 	}
 }
 
