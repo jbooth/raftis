@@ -18,18 +18,7 @@ func NewClusterMember(c *config.ClusterConfig, lg *log.Logger) (*ClusterMember, 
 			slotHosts[int32(slot)] = shard.Hosts
 		}
 	}
-	hostConns := make(map[string]hostConn)
-	for _, shard := range c.Shards {
-		for _, host := range shard.Hosts {
-			var err error = nil
-			hostConns[host], err = newHostConn(host)
-			if err != nil {
-				hostConns[host].markErr()
-				lg.Printf("Error initially connecting to %s : %s", host, err)
-			}
-		}
-	}
-	conn, err := NewPassThru(host)
+	hostConns := make(map[string]*hostConn)
 	return &ClusterMember{
 		lg,
 		&sync.RWMutex{},
@@ -54,7 +43,7 @@ type hostConn struct {
 	lastErrTime *int64
 }
 
-func (h *hostConn) lastErrTime() int64 {
+func (h *hostConn) getLastErrTime() int64 {
 	return atomic.LoadInt64(h.lastErrTime)
 }
 
@@ -66,19 +55,24 @@ func (h *hostConn) markErr() {
 // should hold cluster writelock while calling this to insure visibility
 func (h *hostConn) renew() (err error) {
 	h.p, err = NewPassThru(h.host)
+	newLastErrTime := int64(0)
 	if err != nil {
-		h.lastErrTime = 0
+		newLastErrTime = 0
 	} else {
-		h.lastErrTime = time.Unix().Now()
+		newLastErrTime = time.Now().Unix()
 	}
+	atomic.StoreInt64(h.lastErrTime, newLastErrTime)
+	return err
 }
 
-func newHostConn(host string) (*hostConn, err) {
+func newHostConn(host string) (*hostConn, error) {
 	p, err := NewPassThru(host)
 	if err != nil {
 		return nil, err
 	}
-	return &hostConn{p, host, -1}
+	negOne := int64(-1)
+	atomic.StoreInt64(&negOne, -1)
+	return &hostConn{p, host, &negOne}, nil
 }
 
 func (c *ClusterMember) HasKey(cmdName string, args [][]byte) (bool, error) {
@@ -113,14 +107,21 @@ func (c *ClusterMember) ForwardCommand(cmdName string, args [][]byte) (io.Writer
 	if len(args) == 0 {
 		return nil, fmt.Errorf("Can't forward command %s, need at least 1 arg for key!", cmdName)
 	}
-	conn, err := c.getConnForKey(args[0])
-	if err != nil {
-		return nil, err
+	for {
+		conn, err := c.getConnForKey(args[0])
+		if err != nil {
+			return nil, err
+		}
+		fwd, err := conn.p.Command(cmdName, args)
+		if err != nil {
+		} else {
+			return fwd, nil
+		}
 	}
-	return conn.Command(cmdName, args)
+	return nil, fmt.Errorf("Couldn't send command")
 }
 
-func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
+func (c *ClusterMember) getConnForKey(key []byte) (*hostConn, error) {
 	c.l.RLock()
 	defer c.l.RUnlock()
 	slot := c.slotForKey(key)
@@ -140,10 +141,6 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 	sameGroup, hasSameGroup := hostsByGroup[c.c.Me.Group]
 	var err error
 	if hasSameGroup {
-		hostConn := c.hostConns[host]
-		if hostConn != nil {
-
-		}
 		//c.lg.Printf("Connecting to host from same group %+v", sameGroup)
 		sameGroupConn, err := c.getConnForHost(sameGroup.RedisAddr)
 		if err == nil {
@@ -173,10 +170,10 @@ func (c *ClusterMember) getConnForKey(key []byte) (*PassthruConn, error) {
 var hostMarkedDown error = fmt.Errorf("Host down")
 
 // assumes Rlock is held, returns error if this host is marked down
-func (c *ClusterMember) getConnForHost(host string) (*PassthruConn, error) {
+func (c *ClusterMember) getConnForHost(host string) (*hostConn, error) {
 	conn, ok := c.hostConns[host]
 	if ok {
-		lastErrTime := conn.lastErrTime()
+		lastErrTime := conn.getLastErrTime()
 		if lastErrTime > 0 {
 			if time.Now().Unix()-lastErrTime > 360 {
 				// if older than 5 minutes renew
@@ -188,7 +185,7 @@ func (c *ClusterMember) getConnForHost(host string) (*PassthruConn, error) {
 					c.l.RLock()
 				}()
 				// double check after writelock
-				if time.Now().Unix()-conn.lastErrTime() > 0 {
+				if time.Now().Unix()-conn.getLastErrTime() > 0 {
 					conn.renew()
 				}
 				return conn, nil
@@ -200,7 +197,24 @@ func (c *ClusterMember) getConnForHost(host string) (*PassthruConn, error) {
 		}
 		return conn, nil
 	} else {
-		return nil, fmt.Errorf("No conn identified for host %s")
+		// uninialized, initialize this conn
+
+		// switch to writelock
+		c.l.RUnlock()
+		c.l.Lock()
+		defer func() {
+			c.l.Unlock()
+			c.l.RLock()
+		}()
+
+		// instantiate conn
+		newConn, err := newHostConn(host)
+		if err != nil {
+			return nil, err
+		}
+		// set and return
+		c.hostConns[host] = newConn
+		return newConn, nil
 	}
 }
 

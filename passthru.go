@@ -34,6 +34,7 @@ func NewPassThru(remoteHost string) (*PassthruConn, error) {
 		in,
 		bufio.NewWriter(conn),
 		new(sync.Mutex),
+		false,
 	}
 	go ret.routeResponses()
 	return ret, nil

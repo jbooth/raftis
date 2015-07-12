@@ -1,0 +1,3 @@
+bin/raftis/raftis
+bin/genconfig/genconfig
+*.go.swp
