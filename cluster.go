@@ -54,7 +54,7 @@ func (h *hostConn) markErr() {
 
 // should hold cluster writelock while calling this to insure visibility
 func (h *hostConn) renew() (err error) {
-	h.p, err = NewPassThru(h.host)
+	h.p, err = NewPassThru(h.host, h.p.lg)
 	newLastErrTime := int64(0)
 	if err != nil {
 		newLastErrTime = 0
@@ -65,8 +65,8 @@ func (h *hostConn) renew() (err error) {
 	return err
 }
 
-func newHostConn(host string) (*hostConn, error) {
-	p, err := NewPassThru(host)
+func newHostConn(host string, lg *log.Logger) (*hostConn, error) {
+	p, err := NewPassThru(host, lg)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (c *ClusterMember) getConnForKey(key []byte) (*hostConn, error) {
 	defer c.l.RUnlock()
 	slot := c.slotForKey(key)
 	hosts, ok := c.slotHosts[slot]
-	//c.lg.Printf("Choosing from hosts %+v for key %s slot %d", hosts, key, slot)
+	c.lg.Printf("Choosing from hosts %+v for key %s slot %d", hosts, key, slot)
 	if !ok {
 		return nil, fmt.Errorf("No hosts configured for slot %d from key %s", slot, key)
 	}
@@ -141,10 +141,10 @@ func (c *ClusterMember) getConnForKey(key []byte) (*hostConn, error) {
 	sameGroup, hasSameGroup := hostsByGroup[c.c.Me.Group]
 	var err error
 	if hasSameGroup {
-		//c.lg.Printf("Connecting to host from same group %+v", sameGroup)
+		c.lg.Printf("Connecting to host from same group %+v", sameGroup)
 		sameGroupConn, err := c.getConnForHost(sameGroup.RedisAddr)
 		if err == nil {
-			//c.lg.Printf("returning from same group")
+			c.lg.Printf("returning from same group")
 			return sameGroupConn, nil
 		} else {
 			if err != hostMarkedDown {
@@ -208,7 +208,7 @@ func (c *ClusterMember) getConnForHost(host string) (*hostConn, error) {
 		}()
 
 		// instantiate conn
-		newConn, err := newHostConn(host)
+		newConn, err := newHostConn(host, c.lg)
 		if err != nil {
 			return nil, err
 		}
