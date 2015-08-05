@@ -108,12 +108,16 @@ func (c *ClusterMember) ForwardCommand(cmdName string, args [][]byte) (io.Writer
 		return nil, fmt.Errorf("Can't forward command %s, need at least 1 arg for key!", cmdName)
 	}
 	for {
+		c.lg.Printf("Forwarding cmd %s, getting conn", cmdName)
 		conn, err := c.getConnForKey(args[0])
 		if err != nil {
 			return nil, err
 		}
+		c.lg.Printf("got conn to %s, executing command", conn.p.conn.RemoteAddr().String())
 		fwd, err := conn.p.Command(cmdName, args)
 		if err != nil {
+			conn.markErr()
+			c.lg.Printf("got err %s forwarding command %s  to conn %s", err, cmdName, conn.p.conn.RemoteAddr().String())
 		} else {
 			return fwd, nil
 		}

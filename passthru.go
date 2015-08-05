@@ -139,9 +139,11 @@ func (p *PassthruConn) Close() {
 }
 
 func (p *PassthruConn) closeInternal() {
-	close(p.pendingResp)
-	p.conn.Close()
-	p.closed = true
+	if !p.closed {
+		close(p.pendingResp)
+		p.conn.Close()
+		p.closed = true
+	}
 }
 
 // writes and flushes command to specified bufio.Writer
