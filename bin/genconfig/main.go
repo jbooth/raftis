@@ -13,7 +13,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // first 3 args are configDir,
@@ -81,7 +80,7 @@ func main() {
 		}
 		log.Printf("local ip resoled to " + myIp)
 
-		me := &config.Host{
+		me := config.Host{
 			RedisAddr:    fmt.Sprintf("%s:%s", myIp, redisPort),
 			FlotillaAddr: fmt.Sprintf("%s:%s", myIp, flotillaPort),
 			Group:        "",
@@ -91,11 +90,22 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		cfg := config.ClusterConfig {
+		// record which group we were assigned
+		for _, s := range shards {
+			for _, h := range s.Hosts {
+				if h.RedisAddr == me.RedisAddr {
+					me.Group = h.Group
+				}
+			}
+		}
+		if me.Group == "" {
+			panic(fmt.Errorf("Something wrong, we shouldn't have empty group assignment from master!  \n me: %+v, \n shards: %+v", me, shards))
+		}
+		cfg := config.ClusterConfig{
 			NumSlots: 100,
-			Me: me,
-			Datadir: dataDir,
-			Shards: shards,
+			Me:       me,
+			Datadir:  dataDir,
+			Shards:   shards,
 		}
 		err = writeConfigs([]config.ClusterConfig{cfg}, configDir)
 		if err != nil {
@@ -198,7 +208,7 @@ func readEtcdShards(etcdUrl string, me config.Host, numHosts int) (shards []conf
 			panic(err)
 		}
 		shards := config.Shards(100, hosts)
-		err = publishShards(etcdClient, configKey, shards)
+		err = publishShards(etcdClient, shardsKey, shards)
 		if err != nil {
 			panic(err)
 		}
@@ -233,7 +243,7 @@ func registerMyself(etcdClient *etcd.Client, nodesKey string, me config.Host) er
 	if err != nil {
 		return err
 	}
-	_, err := etcdClient.Create(fmt.Sprintf("%s/%s", nodesKey, me.RedisAddr), string(marshaled), 300)
+	_, err = etcdClient.Create(fmt.Sprintf("%s/%s", nodesKey, me.RedisAddr), string(marshaled), 300)
 	return err
 }
 
@@ -267,8 +277,8 @@ func getHostList(etcdClient *etcd.Client, nodesKey string) ([]config.Host, error
 	hosts := make([]config.Host, 0, 0)
 	for _, node := range resp.Node.Nodes {
 		//todo remove duplication
-		h := &config.Host{}
-		err = json.Unmarshal(h,node.Value)
+		h := config.Host{}
+		err = json.Unmarshal([]byte(node.Value), &h)
 		if err != nil {
 			return nil, err
 		}
@@ -290,13 +300,13 @@ func publishShards(etcdClient *etcd.Client, shardsKey string, shards []config.Sh
 
 // waits for config to be published under `configKey` and once it's published reads, unmarshals and returns Hosts.
 // used by bootstrap `follower`
-func readShards(etcdClient *etcd.Client, configKey string) (hosts []config.Host, err error) {
+func readShards(etcdClient *etcd.Client, configKey string) (shards []config.Shard, err error) {
 	resp, err := etcdClient.Watch(configKey, 0, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	err = json.Unmarshal([]byte(resp.Node.Value), &hosts)
-	return hosts, err
+	err = json.Unmarshal([]byte(resp.Node.Value), &shards)
+	return shards, err
 }
 
 //returns "" empty string if ip can't be obtained, which should never happen
