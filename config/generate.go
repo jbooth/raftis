@@ -32,8 +32,24 @@ func Singlenode(numShards int, hostsPerShard int, dataRoot string) []ClusterConf
 // hosts must contain the same number of hosts for each distinct group, i.e., len(hosts) % numDistinctGroups == 0 must hold true.
 // We recommend 3 groups and len(hosts) % 3 == 0
 func AutoCluster(numSlots int, hosts []Host, dataDirs []string) []ClusterConfig {
+	// split the hosts into shards
+	shards := Shards(numSlots, hosts)
+	// make a config for each host
+	ret := make([]ClusterConfig, len(hosts), len(hosts))
+	for i := 0; i < len(hosts); i++ {
+		ret[i] = ClusterConfig{
+			NumSlots: uint32(numSlots),
+			Me:       hosts[i],
+			Datadir:  dataDirs[i],
+			Shards:   shards,
+		}
+	}
+	return ret
+}
+
+func Shards(numSlots int, hosts []Host) []Shard {
 	if len(hosts) == 0 {
-		return make([]ClusterConfig, 0, 0)
+		return make([]Shard, 0, 0)
 	}
 	fmt.Printf("Building autocluster for hosts %+v\n", hosts)
 	// make sure we have exactly 1 in each replica set
@@ -58,7 +74,6 @@ func AutoCluster(numSlots int, hosts []Host, dataDirs []string) []ClusterConfig 
 			}
 		}
 	}
-
 	// split the hosts into shards
 	shards := make([]Shard, len(hosts)/countPerGroup, len(hosts)/countPerGroup)
 	for i := 0; i < len(shards); i++ {
@@ -77,15 +92,5 @@ func AutoCluster(numSlots int, hosts []Host, dataDirs []string) []ClusterConfig 
 		}
 		shards[i] = Shard{mySlots, myHosts}
 	}
-	// make a config for each host
-	ret := make([]ClusterConfig, len(hosts), len(hosts))
-	for i := 0; i < len(hosts); i++ {
-		ret[i] = ClusterConfig{
-			NumSlots: uint32(numSlots),
-			Me:       hosts[i],
-			Datadir:  dataDirs[i],
-			Shards:   shards,
-		}
-	}
-	return ret
+	return shards
 }
