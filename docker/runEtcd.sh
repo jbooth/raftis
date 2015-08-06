@@ -8,3 +8,5 @@ mkdir -p /var/raftis/data
 
 
 # run server
+conf=`ls /var/raftis/conf/ | head -1`
+/bin/raftis -conf /var/raftis/conf/$conf

@@ -90,7 +90,7 @@ func Shards(numSlots int, hosts []Host) []Shard {
 		for h := shardStartIdx; h < shardStartIdx+countPerGroup; h++ {
 			myHosts = append(myHosts, hosts[h])
 		}
-		shards[i] = Shard{mySlots, myHosts}
+		shards[i] = Shard{i, mySlots, myHosts}
 	}
 	return shards
 }

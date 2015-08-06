@@ -14,8 +14,9 @@ type ClusterConfig struct {
 }
 
 type Shard struct {
-	Slots []uint32 `json:"slots"`
-	Hosts []Host   `json:"hosts"`
+	ShardId int,   `json: "id"`  // invalid if negative
+	Slots []uint32 `json:"slots"` // which slots this shard owns
+	Hosts []Host   `json:"hosts"` // which hosts are currently serving this shard
 }
 
 type Host struct {

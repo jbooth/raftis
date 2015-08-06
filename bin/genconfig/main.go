@@ -76,23 +76,28 @@ func main() {
 			flotillaPort = args[6]
 		}
 		myIp := myIp()
+		if myIp == "" {
+			panic("ip can't be empty, something went wrong")
+		}
+		log.Printf("local ip resoled to " + myIp)
+
 		me := &config.Host{
 			RedisAddr:    fmt.Sprintf("%s:%s", myIp, redisPort),
 			FlotillaAddr: fmt.Sprintf("%s:%s", myIp, flotillaPort),
 			Group:        "",
 		}
 
-		cfg, err := readEtcdConfig(etcdUrl, group, numHosts)
+		shards, err := readEtcdShards(etcdUrl, me, numHosts)
 		if err != nil {
 			panic(err)
 		}
-		dataDirs := make([]string, len(hosts), len(hosts))
-		for i, _ := range hosts {
-			dataDirs[i] = dataDir
+		cfg := config.ClusterConfig {
+			NumSlots: 100,
+			Me: me,
+			Datadir: dataDir,
+			Shards: shards,
 		}
-		cfg := readEtcdConfig(etcdUrl, numHosts)
-		cfgs := config.AutoCluster(100, hosts, dataDirs)
-		err = writeConfigs(cfgs, configDir)
+		err = writeConfigs([]config.ClusterConfig{cfg}, configDir)
 		if err != nil {
 			panic(err)
 		}
@@ -100,7 +105,6 @@ func main() {
 		usage(args)
 		return
 	}
-
 }
 
 func usage(args []string) {
@@ -169,22 +173,17 @@ func readHosts(hostPath string) (hosts []config.Host, err error) {
 	return ret, nil
 }
 
-func readEtcdConfig(etcdUrl string, me config.Host, numHosts int) (cfg config.ClusterConfig, err error) {
+func readEtcdShards(etcdUrl string, me config.Host, numHosts int) (shards []config.Shard, err error) {
 	etcdClient := etcd.NewClient([]string{etcdUrl})
 	namespacePrefix := "/raftis/cluster/"
-	ip := myIp()
-	if ip == "" {
-		panic("ip can't be empty, something went wrong")
-	}
-	log.Printf("local ip resoled to " + ip)
-	amIAMaster, startIndex, err := tryBecomeBootstrapMaster(etcdClient, namespacePrefix, ip)
+	amIAMaster, startIndex, err := tryBecomeBootstrapMaster(etcdClient, namespacePrefix, me.RedisAddr)
 	log.Printf("Am i a Master? %t", amIAMaster)
 	if err != nil {
 		panic(err)
 	}
 	nodesKey := namespacePrefix + "nodes"
-	configKey := namespacePrefix + "hostsConfig"
-	err = registerMyself(etcdClient, nodesKey, ip, group)
+	shardsKey := namespacePrefix + "shards"
+	err = registerMyself(etcdClient, nodesKey, me)
 	if err != nil {
 		panic(err)
 	}
@@ -198,15 +197,15 @@ func readEtcdConfig(etcdUrl string, me config.Host, numHosts int) (cfg config.Cl
 		if err != nil {
 			panic(err)
 		}
-	cfg:
-		err = publishHostsConfig(etcdClient, configKey, cfg)
+		shards := config.Shards(100, hosts)
+		err = publishShards(etcdClient, configKey, shards)
 		if err != nil {
 			panic(err)
 		}
-		return hosts, nil
+		return shards, nil
 	} else {
 		log.Printf("Waiting for Master to publish config...")
-		return readConfig(etcdClient, configKey)
+		return readShards(etcdClient, shardsKey)
 	}
 }
 
@@ -214,8 +213,8 @@ func readEtcdConfig(etcdUrl string, me config.Host, numHosts int) (cfg config.Cl
 // returnes amIAMaster = true if suceeds, false otherwise
 func tryBecomeBootstrapMaster(etcdClient *etcd.Client,
 	namespacePrefix string,
-	ip string) (amIAMaster bool, currentIndex uint64, err error) {
-	resp, err := etcdClient.Create(namespacePrefix+"bootstrapMaster", ip, 0)
+	redisAddr string) (amIAMaster bool, currentIndex uint64, err error) {
+	resp, err := etcdClient.Create(namespacePrefix+"bootstrapMaster", redisAddr, 0)
 	if err != nil {
 		v, ok := err.(*etcd.EtcdError)
 		if ok && v.Message == "Key already exists" {
@@ -229,8 +228,12 @@ func tryBecomeBootstrapMaster(etcdClient *etcd.Client,
 
 // registers local ip and `group` under `nodesKey`
 // used by bootstrap `master` and `followers`
-func registerMyself(etcdClient *etcd.Client, nodesKey string, ip string, group string) error {
-	_, err := etcdClient.Create(fmt.Sprintf("%s/%s", nodesKey, ip+"::"+group), time.Now().String(), 0)
+func registerMyself(etcdClient *etcd.Client, nodesKey string, me config.Host) error {
+	marshaled, err := json.Marshal(me)
+	if err != nil {
+		return err
+	}
+	_, err := etcdClient.Create(fmt.Sprintf("%s/%s", nodesKey, me.RedisAddr), string(marshaled), 300)
 	return err
 }
 
@@ -263,50 +266,36 @@ func getHostList(etcdClient *etcd.Client, nodesKey string) ([]config.Host, error
 	}
 	hosts := make([]config.Host, 0, 0)
 	for _, node := range resp.Node.Nodes {
-		hostGroup := strings.Split(strings.TrimPrefix(node.Key, nodesKey+"/"), "::")
-		host := hostGroup[0]
-		group := hostGroup[1]
 		//todo remove duplication
-		h := config.Host{
-			RedisAddr:    fmt.Sprintf("%s:%d", host, 8679),
-			FlotillaAddr: fmt.Sprintf("%s:%d", host, 1103),
-			Group:        group,
+		h := &config.Host{}
+		err = json.Unmarshal(h,node.Value)
+		if err != nil {
+			return nil, err
 		}
 		hosts = append(hosts, h)
 	}
 	return hosts, nil
 }
 
-// marshals given hosts into json and sets it as a value for config key.
+// marshals given shards into json and sets it as a value for config key.
 // used by bootstrap `master`
-func publishHostsConfig(etcdClient *etcd.Client, configKey string, hosts []config.Host) error {
-	marshaled, err := json.Marshal(hosts)
+func publishShards(etcdClient *etcd.Client, shardsKey string, shards []config.Shard) error {
+	marshaled, err := json.Marshal(shards)
 	if err != nil {
 		return err
 	}
-	_, err = etcdClient.Create(configKey, string(marshaled), 0)
+	_, err = etcdClient.Create(shardsKey, string(marshaled), 0)
 	return err
 }
 
 // waits for config to be published under `configKey` and once it's published reads, unmarshals and returns Hosts.
 // used by bootstrap `follower`
-func readHostsConfig(etcdClient *etcd.Client, configKey string) (hosts []config.Host, err error) {
+func readShards(etcdClient *etcd.Client, configKey string) (hosts []config.Host, err error) {
 	resp, err := etcdClient.Watch(configKey, 0, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	err = json.Unmarshal([]byte(resp.Node.Value), &hosts)
-	return hosts, err
-}
-
-// waits for config to be published under `configKey` and once it's published reads, unmarshals and returns.
-// config.Me will be replaced with our host
-func readConfig(etcdClient *etcd.Client, configKey string) (cfg config.ClusterConfig, err error) {
-	resp, err := etcdClient.Watch(configKey, 0, false, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal([]byte(resp.Node.Value), &cfg)
 	return hosts, err
 }
 
