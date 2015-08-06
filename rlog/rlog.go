@@ -29,11 +29,11 @@ func New(out io.Writer, prefix string, flag int, debugLogging bool) *Logger {
 }
 
 func (l *Logger) Errorf(format string, v ...interface{}) {
-	l.WrappedLogger.Printf(format, v)
+	l.WrappedLogger.Printf(format, v...)
 }
 
 func (l *Logger) Printf(format string, v ...interface{}) {
 	if debug {
-		l.WrappedLogger.Printf(format, v)
+		l.WrappedLogger.Printf(format, v...)
 	}
 }
