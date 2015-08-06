@@ -59,16 +59,30 @@ func main() {
 		}
 	} else if strings.ToLower(mode) == "etcd-cluster" {
 		// configDir dataDir etcd-cluster group numHosts [etcdUrl]
-		group := args[3]
-		numHosts, err := strconv.Atoi(args[4])
+		numHosts, err := strconv.Atoi(args[3])
 		if err != nil {
 			panic(err)
 		}
-		etcdUrl := "http://localhost:2379"
-		if len(args) > 5 {
-			etcdUrl = args[5]
+		etcdUrl := "http://raftis-dashboard:4001"
+		if len(args) > 4 {
+			etcdUrl = args[4]
 		}
-		hosts, err := readEtcdConfig(etcdUrl, group, numHosts)
+		redisPort := "6379"
+		if len(args) > 5 {
+			redisPort = args[5]
+		}
+		flotillaPort := "1103"
+		if len(args) > 6 {
+			flotillaPort = args[6]
+		}
+		myIp := myIp()
+		me := &config.Host{
+			RedisAddr:    fmt.Sprintf("%s:%s", myIp, redisPort),
+			FlotillaAddr: fmt.Sprintf("%s:%s", myIp, flotillaPort),
+			Group:        "",
+		}
+
+		cfg, err := readEtcdConfig(etcdUrl, group, numHosts)
 		if err != nil {
 			panic(err)
 		}
@@ -76,6 +90,7 @@ func main() {
 		for i, _ := range hosts {
 			dataDirs[i] = dataDir
 		}
+		cfg := readEtcdConfig(etcdUrl, numHosts)
 		cfgs := config.AutoCluster(100, hosts, dataDirs)
 		err = writeConfigs(cfgs, configDir)
 		if err != nil {
@@ -154,7 +169,7 @@ func readHosts(hostPath string) (hosts []config.Host, err error) {
 	return ret, nil
 }
 
-func readEtcdConfig(etcdUrl string, me config.Host, numHosts int) (cfg config.Config, err error) {
+func readEtcdConfig(etcdUrl string, me config.Host, numHosts int) (cfg config.ClusterConfig, err error) {
 	etcdClient := etcd.NewClient([]string{etcdUrl})
 	namespacePrefix := "/raftis/cluster/"
 	ip := myIp()
@@ -179,10 +194,11 @@ func readEtcdConfig(etcdUrl string, me config.Host, numHosts int) (cfg config.Co
 		if err != nil {
 			panic(err)
 		}
-		hosts, err := buildHostsConfig(etcdClient, nodesKey)
+		hosts, err := getHostList(etcdClient, nodesKey)
 		if err != nil {
 			panic(err)
 		}
+	cfg:
 		err = publishHostsConfig(etcdClient, configKey, cfg)
 		if err != nil {
 			panic(err)
@@ -238,9 +254,9 @@ func waitForAllToRegister(etcdClient *etcd.Client, nodesKey string, numHosts int
 	return waitFor(etcdClient, nodesKey, numHosts, startIndex)
 }
 
-//reads `nodesKey` after all nodes in cluster are registered under it, builds and returns Hosts
+//reads `nodesKey` after all nodes in cluster are registered under it, builds and
 // used by bootstrap `master`
-func buildHostsConfig(etcdClient *etcd.Client, nodesKey string) ([]config.Config, error) {
+func getHostList(etcdClient *etcd.Client, nodesKey string) ([]config.Host, error) {
 	resp, err := etcdClient.Get(nodesKey, false, true)
 	if err != nil {
 		return nil, err
@@ -285,7 +301,7 @@ func readHostsConfig(etcdClient *etcd.Client, configKey string) (hosts []config.
 
 // waits for config to be published under `configKey` and once it's published reads, unmarshals and returns.
 // config.Me will be replaced with our host
-func readConfig(etcdClient *etcd.Client, configKey string) (cfg []config.Config, err error) {
+func readConfig(etcdClient *etcd.Client, configKey string) (cfg config.ClusterConfig, err error) {
 	resp, err := etcdClient.Watch(configKey, 0, false, nil, nil)
 	if err != nil {
 		return nil, err
