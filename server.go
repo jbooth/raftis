@@ -122,7 +122,7 @@ func NewServer(c *config.ClusterConfig,
 		log.LstdFlags,
 		debugLogging)
 	etcdClient := etcd.NewClient([]string{c.Etcd})
-	etcd.SetLogger(lg.WrappedLogger.Logger)
+	//etcd.SetLogger(lg.WrappedLogger.Logger)
 
 	// find our replicaset
 	var ours []config.Host = nil
