@@ -9,4 +9,4 @@ RUN chmod +x /bin/runEtcd
 VOLUME [ "/var/raftis" ]
 EXPOSE 1103
 EXPOSE 6379
-CMD /bin/runEtcd http://raftis-dashboard:4001/
+CMD /bin/runEtcd 
