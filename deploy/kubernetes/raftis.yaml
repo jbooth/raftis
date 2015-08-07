@@ -18,14 +18,14 @@ spec:
         image: raftis/raftis:latest
         env:
         - name: ETCDURL
-          value: "http://10.65.5.120:4001"
+          value: "http://raftis-dashboard:4001"
         - name: NUMHOSTS
           value: "9"
         - name: ETCDBASE
           value: "/raftis/cluster"
         ports:
         - containerPort: 1103
-        - containerPort: 6379
+        - containerPort: 4001
 
         volumeMounts:
         - mountPath: /var/raftis
