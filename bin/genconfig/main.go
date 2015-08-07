@@ -262,7 +262,7 @@ func registerMyself(etcdClient *etcd.Client, nodesKey string, me config.Host) er
 	if err != nil {
 		return err
 	}
-	_, err = etcdClient.Create(fmt.Sprintf("%s/%s", nodesKey, me.RedisAddr), string(marshaled), 300)
+	_, err = etcdClient.Set(fmt.Sprintf("%s/%s", nodesKey, me.RedisAddr), string(marshaled), 300)
 	return err
 }
 
