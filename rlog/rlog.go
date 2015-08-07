@@ -12,7 +12,7 @@ const (
 )
 
 var (
-	debug = false
+	debug = true
 )
 
 type WrappedLogger struct {
@@ -33,6 +33,7 @@ func (l *Logger) Errorf(format string, v ...interface{}) {
 }
 
 func (l *Logger) Printf(format string, v ...interface{}) {
+	log.Printf(format, v)
 	if debug {
 		l.WrappedLogger.Printf(format, v...)
 	}

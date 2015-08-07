@@ -5,7 +5,7 @@ mkdir -p /var/raftis/conf
 mkdir -p /var/raftis/data
 # generate configs 
 echo "generating conf"
-/bin/genconfig /var/raftis/conf /var/raftis/data etcd-cluster $NUMHOSTS $ETCDURL
+/bin/genconfig /var/raftis/conf /var/raftis/data etcd-cluster $NUMHOSTS $ETCDBASE $ETCDURL
 echo "generated conf!"
 
 

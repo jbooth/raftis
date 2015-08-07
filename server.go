@@ -2,7 +2,9 @@ package raftis
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"github.com/coreos/go-etcd/etcd"
 	"github.com/jbooth/flotilla"
 	mdb "github.com/jbooth/gomdb"
 	config "github.com/jbooth/raftis/config"
@@ -13,6 +15,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -103,12 +106,12 @@ var (
 
 type Server struct {
 	cluster  *ClusterMember
+	etcdC    *etcd.Client
 	flotilla flotilla.DB
 	redis    *net.TCPListener
 	lg       *log.Logger
-	stats	 *StatsCounter
+	stats    *StatsCounter
 }
-
 
 func NewServer(c *config.ClusterConfig,
 	debugLogging bool) (*Server, error) {
@@ -118,6 +121,8 @@ func NewServer(c *config.ClusterConfig,
 		fmt.Sprintf("Raftis %s:\t", c.Me.RedisAddr),
 		log.LstdFlags,
 		debugLogging)
+	etcdClient := etcd.NewClient([]string{c.Etcd})
+	etcd.SetLogger(lg.WrappedLogger.Logger)
 
 	// find our replicaset
 	var ours []config.Host = nil
@@ -129,8 +134,11 @@ func NewServer(c *config.ClusterConfig,
 		}
 	}
 	if ours == nil {
+		lg.Printf("Host %+v host in hosts %+v", c.Me, c.Shards)
+		time.Sleep(1e6 * time.Second)
 		return nil, fmt.Errorf("Host %+v not in hosts %+v", c.Me, c.Shards)
 	}
+
 	flotillaPeers := make([]string, len(ours), len(ours))
 	for idx, h := range ours {
 		flotillaPeers[idx] = h.FlotillaAddr
@@ -162,6 +170,7 @@ func NewServer(c *config.ClusterConfig,
 	if err != nil {
 		return nil, fmt.Errorf("Err connecting to cluster %s", err)
 	}
+	// start heartbeat and cluster refresh
 
 	// start listening on redis port
 	redisAddr, err := net.ResolveTCPAddr("tcp4", c.Me.RedisAddr)
@@ -172,9 +181,76 @@ func NewServer(c *config.ClusterConfig,
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", c.Me.RedisAddr, err)
 	}
-	stats := ServerStats(time.Second * 30, lg)
-	s := &Server{cl, f, redisListen, lg, stats}
+	stats := &StatsCounter{
+		currInterval:    NewStatsInterval(),
+		l:               &sync.Mutex{},
+		ticker:          time.NewTicker(5 * time.Second), // every 5 seconds
+		diskTotal:       totalDiskSpace(),
+		serverStartTime: time.Now().Unix(),
+	}
+	s := &Server{cl, etcdClient, f, redisListen, lg, stats}
+	// update heartbeats and config
+	go func() {
+		for _ = range stats.ticker.C {
+			// get stats
+			collected := stats.collectInterval()
+			// get config
+			s.cluster.l.RLock()
+			etcdBase := s.cluster.c.EtcdBase
+			me := s.cluster.c.Me
+			prevConfig := s.cluster.c
+			s.cluster.l.RUnlock()
+			confResp, err := s.etcdC.Get(etcdBase+"/shards", false, false)
+			if err != nil {
+				panic("Lost contact with etcd in heartbeat!")
+			}
+			var shards []config.Shard
+			err = json.Unmarshal([]byte(confResp.Node.Value), &shards)
+			if err != nil {
+				panic(fmt.Errorf("Error unmarshalling shards from etcd!  resp: %s", confResp.Node.Value))
+			}
+			// update config if necessary
+			if !config.ShardsEqual(shards, prevConfig.Shards) {
+				s.cluster.l.Lock()
+				s.cluster.c.Shards = shards
+				myShard := s.cluster.c.MyShard()
+				newPeers := make(map[string]bool)
+				for _, h := range myShard.Hosts {
+					newPeers[h.FlotillaAddr] = true
+				}
+				for _, h := range prevConfig.MyShard().Hosts {
+					_, stillHere := newPeers[h.FlotillaAddr]
+					if !stillHere {
+						addr, err := net.ResolveTCPAddr("tcp", h.FlotillaAddr)
+						if err != nil {
+							panic(err)
+						}
+						err = s.flotilla.RemovePeer(addr)
+						if err != nil {
+							lg.Printf("Error removing peer %s : %s\n", h.FlotillaAddr, err)
+						}
+					}
+				}
+
+				s.cluster.l.Unlock()
+			}
+
+			// update heartbeat
+			heartBeatKey := etcdBase + "/nodes/" + me.RedisAddr + "/heartbeat"
+			heartBeatVal, err := json.Marshal(collected)
+			if err != nil {
+				panic(err)
+			}
+			s.etcdC.Set(heartBeatKey, string(heartBeatVal), 30) // TTL of 30, with updates every 5
+			//lg.Printf("Collected stats interval %s on %s", collected.String(), t.String())
+		}
+	}()
+
 	return s, nil
+}
+
+func (s *Server) joinAbandonedShard(etcdC *etcd.Client, origConfig *config.ClusterConfig) *config.ClusterConfig {
+	return nil
 }
 
 func (s *Server) Serve() (err error) {

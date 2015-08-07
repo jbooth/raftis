@@ -8,9 +8,45 @@ import (
 
 type ClusterConfig struct {
 	NumSlots uint32  `json:"numSlots"`
-	Me       Host    `json:"me"`      // should match a host in one of our shards exactly to identify which peergroup we join
-	Datadir  string  `json:"dataDir"` // local data directory
-	Shards   []Shard `json:"shards"`  // defines topography of cluster
+	Me       Host    `json:"me"`          // should match a host in one of our shards exactly to identify which peergroup we join
+	Etcd     string  `json: "etcd"`       // etcd host, must not have trailing slash
+	EtcdBase string  `json: "etcdShards"` // etcd base node, like /raftis/myClusterName, no trailing slash
+	Datadir  string  `json:"dataDir"`     // local data directory
+	Shards   []Shard `json:"shards"`      // defines topography of cluster
+}
+
+func (c *ClusterConfig) MyShard() Shard {
+	for _, s := range c.Shards {
+		for _, h := range s.Hosts {
+			if h.RedisAddr == c.Me.RedisAddr {
+				return s
+			}
+		}
+	}
+	return Shard{}
+}
+
+func ShardsEqual(ss1 []Shard, ss2 []Shard) bool {
+	if len(ss1) != len(ss2) {
+		return false
+	}
+	for idx, s1 := range ss1 {
+		s2 := ss2[idx]
+		if s1.ShardId != s2.ShardId {
+			return false
+		}
+		for j, slot := range s1.Slots {
+			if s2.Slots[j] != slot {
+				return false
+			}
+		}
+		for j, h := range s1.Hosts {
+			if s2.Hosts[j] != h {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 type Shard struct {

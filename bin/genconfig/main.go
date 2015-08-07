@@ -64,17 +64,22 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		etcdUrl := "http://raftis-dashboard:4001"
+		etcdBase := "/raftis/AWESOME"
 		if len(args) > 4 {
-			etcdUrl = args[4]
+			etcdBase = args[4]
+		}
+
+		etcdUrl := "http://raftis-dashboard:4001"
+		if len(args) > 5 {
+			etcdUrl = args[5]
 		}
 		redisPort := "6379"
-		if len(args) > 5 {
-			redisPort = args[5]
+		if len(args) > 6 {
+			redisPort = args[6]
 		}
 		flotillaPort := "1103"
-		if len(args) > 6 {
-			flotillaPort = args[6]
+		if len(args) > 7 {
+			flotillaPort = args[7]
 		}
 		myIp := myIp()
 		if myIp == "" {
@@ -88,7 +93,7 @@ func main() {
 			Group:        "",
 		}
 
-		shards, err := readEtcdShards(etcdUrl, me, numHosts)
+		shards, err := readEtcdShards(etcdUrl, etcdBase, me, numHosts)
 		log.Printf("Got etcd shards %+v", shards)
 		if err != nil {
 			panic(err)
@@ -103,11 +108,13 @@ func main() {
 			}
 		}
 		if me.Group == "" {
-			panic(fmt.Errorf("Something wrong, we shouldn't have empty group assignment from master!  \n me: %+v, \n shards: %+v", me, shards))
+			log.Printf("Something wrong, we shouldn't have empty group assignment from master!  \n me: %+v, \n shards: %+v", me, shards)
 		}
 		cfg := config.ClusterConfig{
 			NumSlots: 100,
 			Me:       me,
+			Etcd:     etcdUrl,
+			EtcdBase: etcdBase,
 			Datadir:  dataDir,
 			Shards:   shards,
 		}
@@ -188,10 +195,10 @@ func readHosts(hostPath string) (hosts []config.Host, err error) {
 	return ret, nil
 }
 
-func readEtcdShards(etcdUrl string, me config.Host, numHosts int) (shards []config.Shard, err error) {
+func readEtcdShards(etcdUrl string, etcdBase string, me config.Host, numHosts int) (shards []config.Shard, err error) {
 	etcdClient := etcd.NewClient([]string{etcdUrl})
 	log.Printf("connecting to etcd at url %s", etcdUrl)
-	namespacePrefix := "/raftis/cluster/"
+	namespacePrefix := etcdBase + "/"
 	amIAMaster, startIndex, err := tryBecomeBootstrapMaster(etcdClient, namespacePrefix, me.RedisAddr)
 	log.Printf("Am i a Master? %t", amIAMaster)
 	if err != nil {

@@ -21,6 +21,8 @@ spec:
           value: "http://10.65.5.120:4001"
         - name: NUMHOSTS
           value: "9"
+        - name: ETCDBASE
+          value: "/raftis/cluster"
         ports:
         - containerPort: 1103
         - containerPort: 6379
