@@ -73,7 +73,7 @@ func main() {
 		if len(args) > 5 {
 			etcdUrl = args[5]
 		}
-		redisPort := "4001"
+		redisPort := "6379"
 		if len(args) > 6 {
 			redisPort = args[6]
 		}

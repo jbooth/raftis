@@ -8,7 +8,7 @@ spec:
   type: LoadBalancer
   ports:
     - name: 'raftis'
-      port: 4001
-      targetPort: 4001
+      port: 6379
+      targetPort: 6379
   selector:
     name: raftis

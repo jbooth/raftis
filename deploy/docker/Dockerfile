@@ -8,5 +8,5 @@ RUN chmod +x /bin/raftis
 RUN chmod +x /bin/runEtcd
 VOLUME [ "/var/raftis" ]
 EXPOSE 1103
-EXPOSE 4001
+EXPOSE 6379
 CMD /bin/runEtcd 

@@ -25,7 +25,7 @@ spec:
           value: "/raftis/cluster"
         ports:
         - containerPort: 1103
-        - containerPort: 4001
+        - containerPort: 6379
 
         volumeMounts:
         - mountPath: /var/raftis
