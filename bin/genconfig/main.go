@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // first 3 args are configDir,
@@ -88,9 +89,11 @@ func main() {
 		}
 
 		shards, err := readEtcdShards(etcdUrl, me, numHosts)
+		log.Printf("Got etcd shards %+v", shards)
 		if err != nil {
 			panic(err)
 		}
+		log.Printf("Adding self to group")
 		// record which group we were assigned
 		for _, s := range shards {
 			for _, h := range s.Hosts {
@@ -108,6 +111,7 @@ func main() {
 			Datadir:  dataDir,
 			Shards:   shards,
 		}
+		log.Printf("Writing out config and quitting, %+v", cfg)
 		err = writeConfigs([]config.ClusterConfig{cfg}, configDir)
 		if err != nil {
 			panic(err)
@@ -320,11 +324,22 @@ func publishShards(etcdClient *etcd.Client, shardsKey string, shards []config.Sh
 // waits for config to be published under `configKey` and once it's published reads, unmarshals and returns Hosts.
 // used by bootstrap `follower`
 func readShards(etcdClient *etcd.Client, configKey string) (shards []config.Shard, err error) {
-	resp, err := etcdClient.Watch(configKey, 0, false, nil, nil)
-	if err != nil {
-		return nil, err
+	getResp, err := etcdClient.Get(configKey, false, false)
+	for err != nil {
+		v, ok := err.(*etcd.EtcdError)
+		if ok && v.Message == "Key not found" {
+			// watch until it's back
+			log.Printf("No shards for key %s, sleeping 1s and relooping", configKey)
+			time.Sleep(1 * time.Second)
+			getResp, err = etcdClient.Get(configKey, false, false)
+			continue
+		} else {
+			return nil, err
+		}
 	}
-	err = json.Unmarshal([]byte(resp.Node.Value), &shards)
+
+	log.Printf("Got shards: %s", getResp.Node.Value)
+	err = json.Unmarshal([]byte(getResp.Node.Value), &shards)
 	return shards, err
 }
 
