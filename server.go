@@ -97,6 +97,7 @@ var (
 		"SYNCMODE":   dosync,
 		"NOSYNCMODE": donosync,
 		"FATAL":      fatal,
+		"STATS":      stats,
 	}
 )
 
@@ -105,7 +106,9 @@ type Server struct {
 	flotilla flotilla.DB
 	redis    *net.TCPListener
 	lg       *log.Logger
+	stats	 *StatsCounter
 }
+
 
 func NewServer(c *config.ClusterConfig,
 	debugLogging bool) (*Server, error) {
@@ -169,7 +172,8 @@ func NewServer(c *config.ClusterConfig,
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't bind  to redisAddr %s", c.Me.RedisAddr, err)
 	}
-	s := &Server{cl, f, redisListen, lg}
+	stats := ServerStats(time.Second * 30, lg)
+	s := &Server{cl, f, redisListen, lg, stats}
 	return s, nil
 }
 
@@ -202,27 +206,6 @@ func (d *dialer) Dial(address string, timeout time.Duration) (net.Conn, error) {
 var get []byte = []byte("GET")
 
 func (s *Server) doRequest(c *Conn, r *redis.Request) io.WriterTo {
-
-	// config is special cased because not a cluster op
-	if r.Name == "CONFIG" &&
-		len(r.Args) > 0 &&
-		strings.ToUpper(string(r.Args[0])) == "GET" {
-		var resp redis.ReplyWriter
-		if len(r.Args) == 1 {
-			resp = redis.NewError("ERR Wrong number of arguments for CONFIG GET")
-		} else {
-			ret := make([][]byte, 0)
-			if bytes.Equal(r.Args[1], []byte("cluster")) {
-				var buf bytes.Buffer
-				config.WriteConfig(s.cluster.c, &buf)
-				ret = append(ret, []byte("cluster"))
-				ret = append(ret, buf.Bytes())
-			}
-			resp = &redis.ArrayReply{ret}
-		}
-		return resp
-	}
-
 	serverOp, ok := serverOps[r.Name]
 	if ok {
 		return serverOp(r.Args, c, s)
@@ -238,6 +221,7 @@ func (s *Server) doRequest(c *Conn, r *redis.Request) io.WriterTo {
 	}
 	if !hasKey {
 		// we don't have key locally, forward to correct node
+		s.stats.incrNumForwards()
 		fwd, err := s.cluster.ForwardCommand(r.Name, r.Args)
 		if err != nil {
 			return redis.NewError(fmt.Sprintf("Error forwarding command: %s", err.Error()))
@@ -247,10 +231,12 @@ func (s *Server) doRequest(c *Conn, r *redis.Request) io.WriterTo {
 	// have the key locally, apply command or execute read
 	_, ok = writeOps[r.Name]
 	if ok {
+		s.stats.incrNumWrites()
 		return pendingWrite{s.flotilla.Command(r.Name, r.Args)}
 	}
 	readOp, ok := readOps[r.Name]
 	if ok {
+		s.stats.incrNumReads()
 		r := pendingRead{readOp, r.Args, s}
 		if c.syncRead {
 			return pendingSyncRead{s.flotilla.Command("PING", emptyArgs), r}
@@ -322,6 +308,7 @@ func (p pendingSyncRead) WriteTo(w io.Writer) (int64, error) {
 }
 
 func (s *Server) Close() error {
+	s.stats.ticker.Stop()
 	s.redis.Close()
 	return s.flotilla.Close()
 }
@@ -362,4 +349,12 @@ func fatal(args [][]byte, c *Conn, s *Server) io.WriterTo {
 		return redis.NewFatal("FATAL!  No msg")
 	}
 	return redis.NewFatal(string(args[0]))
+}
+
+func stats(args [][]byte, c *Conn, s *Server) io.WriterTo {
+	ret := make([][]byte, 0)
+	ret = append(ret, []byte(fmt.Sprintf("server start time: %d", s.stats.serverStartTime)))
+	ret = append(ret, []byte(fmt.Sprintf("total disk space: %d bytes", s.stats.diskTotal)))
+	ret = append(ret, []byte(fmt.Sprintf("current interval:\n %s", s.stats.currInterval.String())))
+	return &redis.ArrayReply{ret}
 }
