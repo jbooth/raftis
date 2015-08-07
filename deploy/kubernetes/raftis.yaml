@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: raftis
+  labels:
+    name: raftis
+spec:
+  replicas: 9
+  selector:
+    name: raftis
+  template:
+    metadata:
+      labels:
+        name: raftis
+    spec:
+      containers:
+      - name: raftis
+        image: raftis/raftis:latest
+        env:
+        - name: ETCDURL
+          value: "http://10.65.5.120:4001"
+        - name: NUMHOSTS
+          value: "9"
+        ports:
+        - containerPort: 1103
+        - containerPort: 6379
+
+        volumeMounts:
+        - mountPath: /var/raftis
+          name: data
+      volumes:
+        - name: data
+          emptyDir: {}

@@ -2,17 +2,17 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/coreos/go-etcd/etcd"
 	"github.com/jbooth/raftis/config"
 	"io"
 	"log"
+	"net"
 	"os"
 	"strconv"
 	"strings"
-	"github.com/coreos/go-etcd/etcd"
-	"net"
-	"encoding/json"
 	"time"
 )
 
@@ -58,26 +58,61 @@ func main() {
 			panic(err)
 		}
 	} else if strings.ToLower(mode) == "etcd-cluster" {
+		etcd.SetLogger(log.New(os.Stderr, "", log.LstdFlags))
 		// configDir dataDir etcd-cluster group numHosts [etcdUrl]
-		group := args[3]
-		numHosts, err := strconv.Atoi(args[4])
+		numHosts, err := strconv.Atoi(args[3])
 		if err != nil {
 			panic(err)
 		}
-		etcdUrl := "http://localhost:2379"
+		etcdUrl := "http://raftis-dashboard:4001"
+		if len(args) > 4 {
+			etcdUrl = args[4]
+		}
+		redisPort := "6379"
 		if len(args) > 5 {
-			etcdUrl = args[5]
+			redisPort = args[5]
 		}
-		hosts, err := readEtcdConfig(etcdUrl, group, numHosts)
+		flotillaPort := "1103"
+		if len(args) > 6 {
+			flotillaPort = args[6]
+		}
+		myIp := myIp()
+		if myIp == "" {
+			panic("ip can't be empty, something went wrong")
+		}
+		log.Printf("local ip resoled to " + myIp)
+
+		me := config.Host{
+			RedisAddr:    fmt.Sprintf("%s:%s", myIp, redisPort),
+			FlotillaAddr: fmt.Sprintf("%s:%s", myIp, flotillaPort),
+			Group:        "",
+		}
+
+		shards, err := readEtcdShards(etcdUrl, me, numHosts)
+		log.Printf("Got etcd shards %+v", shards)
 		if err != nil {
 			panic(err)
 		}
-		dataDirs := make([]string, len(hosts), len(hosts))
-		for i, _ := range hosts {
-			dataDirs[i] = dataDir
+		log.Printf("Adding self to group")
+		// record which group we were assigned
+		for _, s := range shards {
+			for _, h := range s.Hosts {
+				if h.RedisAddr == me.RedisAddr {
+					me.Group = h.Group
+				}
+			}
 		}
-		cfgs := config.AutoCluster(100, hosts, dataDirs)
-		err = writeConfigs(cfgs, configDir)
+		if me.Group == "" {
+			panic(fmt.Errorf("Something wrong, we shouldn't have empty group assignment from master!  \n me: %+v, \n shards: %+v", me, shards))
+		}
+		cfg := config.ClusterConfig{
+			NumSlots: 100,
+			Me:       me,
+			Datadir:  dataDir,
+			Shards:   shards,
+		}
+		log.Printf("Writing out config and quitting, %+v", cfg)
+		err = writeConfigs([]config.ClusterConfig{cfg}, configDir)
 		if err != nil {
 			panic(err)
 		}
@@ -85,7 +120,6 @@ func main() {
 		usage(args)
 		return
 	}
-
 }
 
 func usage(args []string) {
@@ -110,7 +144,7 @@ func writeConfigs(cfgs []config.ClusterConfig, configDir string) error {
 		}
 	}
 	m, err := json.Marshal(cfgs)
-	if (err != nil){
+	if err != nil {
 		panic(err)
 	}
 	log.Println("config: %s", string(m))
@@ -154,57 +188,71 @@ func readHosts(hostPath string) (hosts []config.Host, err error) {
 	return ret, nil
 }
 
-func readEtcdConfig(etcdUrl string, group string, numHosts int) (hosts []config.Host, err error) {
+func readEtcdShards(etcdUrl string, me config.Host, numHosts int) (shards []config.Shard, err error) {
 	etcdClient := etcd.NewClient([]string{etcdUrl})
+	log.Printf("connecting to etcd at url %s", etcdUrl)
 	namespacePrefix := "/raftis/cluster/"
-	ip := myIp()
-	if ip == ""{
-		panic("ip can't be empty, something went wrong")
-	}
-	log.Printf("local ip resoled to " + ip)
-	amIAMaster, startIndex, err := tryBecomeBootstrapMaster(etcdClient, namespacePrefix, ip)
-	log.Printf("Am i a Master? %t",amIAMaster)
+	amIAMaster, startIndex, err := tryBecomeBootstrapMaster(etcdClient, namespacePrefix, me.RedisAddr)
+	log.Printf("Am i a Master? %t", amIAMaster)
 	if err != nil {
 		panic(err)
 	}
 	nodesKey := namespacePrefix + "nodes"
-	configKey := namespacePrefix + "hostsConfig"
-	err = registerMyself(etcdClient, nodesKey, ip, group)
-	if (err != nil) {
+	shardsKey := namespacePrefix + "shards"
+	err = registerMyself(etcdClient, nodesKey, me)
+	if err != nil {
 		panic(err)
 	}
 	log.Printf("Registered myself!")
 	if amIAMaster {
 		err = waitForAllToRegister(etcdClient, nodesKey, numHosts, startIndex)
-		if (err != nil) {
+		if err != nil {
 			panic(err)
 		}
-		hosts, err := buildHostsConfig(etcdClient, nodesKey)
-		if (err != nil) {
+		// get hosts
+		hosts, err := getHostList(etcdClient, nodesKey)
+		if err != nil {
 			panic(err)
 		}
-		 err = publishHostsConfig(etcdClient, configKey, hosts)
-		if (err != nil) {
+		// assign to groups
+		hostsPerShard := 3
+		numShards := int(len(hosts) / hostsPerShard)
+
+		var hIdx = 0
+		for s := 0; s < numShards; s++ {
+			for h := 0; h < hostsPerShard; h++ {
+				ho := hosts[hIdx]
+				ho.Group = fmt.Sprintf("slc0%d", h+1)
+				hosts[hIdx] = ho
+				hIdx++
+			}
+		}
+
+		// build shards
+		shards := config.Shards(100, hosts)
+		err = publishShards(etcdClient, shardsKey, shards)
+		if err != nil {
 			panic(err)
 		}
-		return hosts, nil
+		return shards, nil
 	} else {
 		log.Printf("Waiting for Master to publish config...")
-		return readHostsConfig(etcdClient, configKey)
+		return readShards(etcdClient, shardsKey)
 	}
 }
 
 //tries to create /raftis/cluster/bootstrapMaster key and
 // returnes amIAMaster = true if suceeds, false otherwise
 func tryBecomeBootstrapMaster(etcdClient *etcd.Client,
-								namespacePrefix string,
-								ip string) (amIAMaster bool, currentIndex uint64, err error) {
-	resp, err := etcdClient.Create(namespacePrefix + "bootstrapMaster", ip, 0)
+	namespacePrefix string,
+	redisAddr string) (amIAMaster bool, currentIndex uint64, err error) {
+	resp, err := etcdClient.Create(namespacePrefix+"bootstrapMaster", redisAddr, 0)
 	if err != nil {
 		v, ok := err.(*etcd.EtcdError)
 		if ok && v.Message == "Key already exists" {
 			return false, 0, nil
 		} else {
+			log.Printf("Error in tryBecomeBootstrapMaster creating %s : %s", namespacePrefix+"bootstrapMaster", err)
 			return false, 0, err
 		}
 	}
@@ -213,8 +261,12 @@ func tryBecomeBootstrapMaster(etcdClient *etcd.Client,
 
 // registers local ip and `group` under `nodesKey`
 // used by bootstrap `master` and `followers`
-func registerMyself(etcdClient *etcd.Client, nodesKey string, ip string, group string) error {
-	_, err := etcdClient.Create(fmt.Sprintf("%s/%s", nodesKey, ip + "::" + group), time.Now().String(), 0)
+func registerMyself(etcdClient *etcd.Client, nodesKey string, me config.Host) error {
+	marshaled, err := json.Marshal(me)
+	if err != nil {
+		return err
+	}
+	_, err = etcdClient.Set(fmt.Sprintf("%s/%s", nodesKey, me.RedisAddr), string(marshaled), 300)
 	return err
 }
 
@@ -229,7 +281,7 @@ func waitFor(etcdClient *etcd.Client, nodesKey string, left int, index uint64) e
 		return err
 	}
 	lastNext := resp.Node.ModifiedIndex + 1
-	return waitFor(etcdClient, nodesKey, left - 1, lastNext)
+	return waitFor(etcdClient, nodesKey, left-1, lastNext)
 }
 
 //wait for `numHosts` hosts to be registered under `nodesKey`. Start waiting since `startIndex`
@@ -238,59 +290,67 @@ func waitForAllToRegister(etcdClient *etcd.Client, nodesKey string, numHosts int
 	return waitFor(etcdClient, nodesKey, numHosts, startIndex)
 }
 
-//reads `nodesKey` after all nodes in cluster are registered under it, builds and returns Hosts
+//reads `nodesKey` after all nodes in cluster are registered under it, builds and
 // used by bootstrap `master`
-func buildHostsConfig(etcdClient *etcd.Client, nodesKey string) ([]config.Host, error) {
+func getHostList(etcdClient *etcd.Client, nodesKey string) ([]config.Host, error) {
 	resp, err := etcdClient.Get(nodesKey, false, true)
 	if err != nil {
 		return nil, err
 	}
 	hosts := make([]config.Host, 0, 0)
 	for _, node := range resp.Node.Nodes {
-		hostGroup := strings.Split(strings.TrimPrefix(node.Key, nodesKey + "/"), "::")
-		host := hostGroup[0]
-		group := hostGroup[1]
 		//todo remove duplication
-		h := config.Host{
-			RedisAddr:    fmt.Sprintf("%s:%d", host, 8679),
-			FlotillaAddr: fmt.Sprintf("%s:%d", host, 1103),
-			Group:        group,
+		h := config.Host{}
+		err = json.Unmarshal([]byte(node.Value), &h)
+		if err != nil {
+			return nil, err
 		}
 		hosts = append(hosts, h)
 	}
 	return hosts, nil
 }
 
-// marshals given hosts into json and sets it as a value for config key.
+// marshals given shards into json and sets it as a value for config key.
 // used by bootstrap `master`
-func publishHostsConfig(etcdClient *etcd.Client, configKey string, hosts []config.Host) error {
-	marshaled, err := json.Marshal(hosts)
+func publishShards(etcdClient *etcd.Client, shardsKey string, shards []config.Shard) error {
+	marshaled, err := json.Marshal(shards)
 	if err != nil {
 		return err
 	}
-	_, err = etcdClient.Create(configKey, string(marshaled), 0)
+	_, err = etcdClient.Create(shardsKey, string(marshaled), 0)
 	return err
 }
 
 // waits for config to be published under `configKey` and once it's published reads, unmarshals and returns Hosts.
 // used by bootstrap `follower`
-func readHostsConfig(etcdClient *etcd.Client, configKey string) (hosts []config.Host, err error) {
-	resp, err := etcdClient.Watch(configKey, 0, false, nil, nil)
-	if (err != nil) {
-		return nil, err
+func readShards(etcdClient *etcd.Client, configKey string) (shards []config.Shard, err error) {
+	getResp, err := etcdClient.Get(configKey, false, false)
+	for err != nil {
+		v, ok := err.(*etcd.EtcdError)
+		if ok && v.Message == "Key not found" {
+			// watch until it's back
+			log.Printf("No shards for key %s, sleeping 1s and relooping", configKey)
+			time.Sleep(1 * time.Second)
+			getResp, err = etcdClient.Get(configKey, false, false)
+			continue
+		} else {
+			return nil, err
+		}
 	}
-	err = json.Unmarshal([]byte(resp.Node.Value), &hosts)
-	return hosts, err
+
+	log.Printf("Got shards: %s", getResp.Node.Value)
+	err = json.Unmarshal([]byte(getResp.Node.Value), &shards)
+	return shards, err
 }
 
 //returns "" empty string if ip can't be obtained, which should never happen
 func myIp() string {
 	addrs, err := net.InterfaceAddrs()
-	if (err != nil){
+	if err != nil {
 		panic(err)
 	}
 	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil  {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil {
 			return ipnet.IP.String()
 		}
 	}
