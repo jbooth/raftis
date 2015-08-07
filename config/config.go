@@ -8,11 +8,11 @@ import (
 
 type ClusterConfig struct {
 	NumSlots uint32  `json:"numSlots"`
-	Me       Host    `json:"me"`          // should match a host in one of our shards exactly to identify which peergroup we join
-	Etcd     string  `json: "etcd"`       // etcd host, must not have trailing slash
-	EtcdBase string  `json: "etcdShards"` // etcd base node, like /raftis/myClusterName, no trailing slash
-	Datadir  string  `json:"dataDir"`     // local data directory
-	Shards   []Shard `json:"shards"`      // defines topography of cluster
+	Me       Host    `json:"me"`         // should match a host in one of our shards exactly to identify which peergroup we join
+	Etcd     string  `json:"etcd"`       // etcd host, must not have trailing slash
+	EtcdBase string  `json:"etcdShards"` // etcd base node, like /raftis/myClusterName, no trailing slash
+	Datadir  string  `json:"dataDir"`    // local data directory
+	Shards   []Shard `json:"shards"`     // defines topography of cluster
 }
 
 func (c *ClusterConfig) MyShard() Shard {
@@ -24,6 +24,33 @@ func (c *ClusterConfig) MyShard() Shard {
 		}
 	}
 	return Shard{}
+}
+
+func (c *ClusterConfig) HeartbeatKey() string {
+	return c.EtcdBase + "/nodes/" + c.Me.RedisAddr
+}
+
+type Heartbeat struct {
+	Host  Host          `json:"host"`
+	Stats StatsInterval `json:"stats"`
+}
+
+type StatsInterval struct {
+	StartTime     int64  `json:"startTime"`
+	EndTime       int64  `json:"endTime"`
+	NumReads      uint64 `json:"numReads"`
+	NumWrites     uint64 `json:"numWrites"`
+	NumForwards   uint64 `json:"numForwards"`
+	DiskSpaceFree uint64 `json:"diskSpaceFree"`
+}
+
+func (s *StatsInterval) String() string {
+	marshaled, err := json.Marshal(s)
+	if err != nil {
+		return err.Error()
+	} else {
+		return string(marshaled)
+	}
 }
 
 func ShardsEqual(ss1 []Shard, ss2 []Shard) bool {

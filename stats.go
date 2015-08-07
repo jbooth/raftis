@@ -1,29 +1,29 @@
 package raftis
 
 import (
+	"github.com/jbooth/raftis/config"
 	log "github.com/jbooth/raftis/rlog"
 	"os"
-	"time"
 	"sync"
 	"syscall"
-	"encoding/json"
+	"time"
 )
 
 type StatsCounter struct {
 	l               *sync.Mutex
 	serverStartTime int64
 	diskTotal       uint64
-	currInterval    *StatsInterval
-	ticker			*time.Ticker
+	currInterval    *config.StatsInterval
+	ticker          *time.Ticker
 }
 
 // creates new ServerStats
 func ServerStats(tickerInterval time.Duration, lg *log.Logger) *StatsCounter {
 	ret := &StatsCounter{
-		currInterval: NewStatsInterval(),
-		l: &sync.Mutex{},
-		ticker: time.NewTicker(tickerInterval),
-		diskTotal: totalDiskSpace(),
+		currInterval:    NewStatsInterval(),
+		l:               &sync.Mutex{},
+		ticker:          time.NewTicker(tickerInterval),
+		diskTotal:       totalDiskSpace(),
 		serverStartTime: time.Now().Unix(),
 	}
 	go func() {
@@ -54,7 +54,7 @@ func (s *StatsCounter) incrNumForwards() {
 }
 
 // resets current interval to new interval and returns the old interval
-func (s *StatsCounter) collectInterval() *StatsInterval {
+func (s *StatsCounter) collectInterval() *config.StatsInterval {
 	//todo: this should write to db, but this is defered for now, we just return current interval
 	s.l.Lock()
 	defer s.l.Unlock()
@@ -81,28 +81,10 @@ func totalDiskSpace() uint64 {
 	return stat.Blocks * uint64(stat.Bsize)
 }
 
-type StatsInterval struct {
-	StartTime int64 `json:"startTime"`
- 	EndTime int64 `json:"endTime"`
-	NumReads uint64 `json:"numReads"`
-	NumWrites uint64 `json:"numWrites"`
-	NumForwards uint64 `json:"numForwards"`
-	DiskSpaceFree uint64 `json:"diskSpaceFree"`
-}
-
-func (s *StatsInterval) String() string {
-	marshaled, err := json.Marshal(s)
-	if err != nil {
-		return err.Error()
-	} else {
-		return string(marshaled)
-	}
-}
-
 // creates new StatsInterval with start time set to Now
-func NewStatsInterval() *StatsInterval {
-	return &StatsInterval{
-		StartTime: time.Now().Unix(),
+func NewStatsInterval() *config.StatsInterval {
+	return &config.StatsInterval{
+		StartTime:     time.Now().Unix(),
 		DiskSpaceFree: freeDiskSpace(),
 	}
 }

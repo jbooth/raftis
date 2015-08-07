@@ -197,7 +197,6 @@ func NewServer(c *config.ClusterConfig,
 			// get config
 			s.cluster.l.RLock()
 			etcdBase := s.cluster.c.EtcdBase
-			me := s.cluster.c.Me
 			prevConfig := s.cluster.c
 			s.cluster.l.RUnlock()
 			confResp, err := s.etcdC.Get(etcdBase+"/shards", false, false)
@@ -236,12 +235,11 @@ func NewServer(c *config.ClusterConfig,
 			}
 
 			// update heartbeat
-			heartBeatKey := etcdBase + "/nodes/" + me.RedisAddr + "/heartbeat"
 			heartBeatVal, err := json.Marshal(collected)
 			if err != nil {
 				panic(err)
 			}
-			s.etcdC.Set(heartBeatKey, string(heartBeatVal), 30) // TTL of 30, with updates every 5
+			s.etcdC.Set(c.HeartbeatKey(), string(heartBeatVal), 30) // TTL of 30, with updates every 5
 			//lg.Printf("Collected stats interval %s on %s", collected.String(), t.String())
 		}
 	}()
@@ -250,6 +248,60 @@ func NewServer(c *config.ClusterConfig,
 }
 
 func (s *Server) joinAbandonedShard(etcdC *etcd.Client, origConfig *config.ClusterConfig) *config.ClusterConfig {
+	for {
+		// pull newest shards
+		confResp, err := s.etcdC.Get(origConfig.EtcdBase+"/shards", false, false)
+		if err != nil {
+			panic("Lost contact with etcd in heartbeat!")
+		}
+		var shards []config.Shard
+		err = json.Unmarshal([]byte(confResp.Node.Value), &shards)
+		// iterate nodes and see if any down
+		downShardIdx := -1
+		downHostIdx := -1
+		for si, s := range shards {
+			for hi, h := range s.Hosts {
+				node := origConfig.EtcdBase + "/nodes/" + h.FlotillaAddr + "/heartbeat"
+				_, err := etcdC.Get(node, false, false)
+				if err != nil {
+					v, ok := err.(*etcd.EtcdError)
+					if ok && v.Message == "Key not found" {
+						// node is down, try to take its place
+						downShardIdx = si
+						downHostIdx = hi
+						goto joinCluster
+					}
+				}
+
+			}
+		}
+	joinCluster:
+		if downHostIdx > 0 {
+			newDownShard := shards[downShardIdx]
+			origConfig.Me.Group = newDownShard.Hosts[downHostIdx].Group
+			newDownShard.Hosts[downHostIdx] = origConfig.Me
+			newShards := shards
+			newShards[downShardIdx] = newDownShard
+			newShardsBytes, err := json.Marshal(newShards)
+			if err != nil {
+				panic(err)
+			}
+			etcdC.CompareAndSwap(origConfig.EtcdBase+"/shards", string(newShardsBytes), 0, confResp.Node.Value, confResp.EtcdIndex)
+			if err != nil {
+				origConfig.Shards = newShards
+				return origConfig
+			}
+		}
+		// sleep 10s before relooping to give etcd a break
+		time.Sleep(10 * time.Second)
+
+	}
+	// pull newest shards and update config
+	// wait on nodes until a shard is dead
+
+	// generate config with us in place
+
+	// get and try to set
 	return nil
 }
 

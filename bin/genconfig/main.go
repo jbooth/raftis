@@ -269,7 +269,8 @@ func tryBecomeBootstrapMaster(etcdClient *etcd.Client,
 // registers local ip and `group` under `nodesKey`
 // used by bootstrap `master` and `followers`
 func registerMyself(etcdClient *etcd.Client, nodesKey string, me config.Host) error {
-	marshaled, err := json.Marshal(me)
+	heartbeat := &config.Heartbeat{Host: me, Stats: config.StatsInterval{}}
+	marshaled, err := json.Marshal(heartbeat)
 	if err != nil {
 		return err
 	}
@@ -307,12 +308,12 @@ func getHostList(etcdClient *etcd.Client, nodesKey string) ([]config.Host, error
 	hosts := make([]config.Host, 0, 0)
 	for _, node := range resp.Node.Nodes {
 		//todo remove duplication
-		h := config.Host{}
+		h := config.Heartbeat{}
 		err = json.Unmarshal([]byte(node.Value), &h)
 		if err != nil {
 			return nil, err
 		}
-		hosts = append(hosts, h)
+		hosts = append(hosts, h.Host)
 	}
 	return hosts, nil
 }
