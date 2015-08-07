@@ -312,6 +312,7 @@ func (s *Server) Serve() (err error) {
 		s.lg.Printf("server on %s going down: %s", s.redis.Addr().String(), err)
 		return
 	}(s)
+	s.lg.Printf("server listening on addr %s", s.redis.Addr().String())
 	for {
 		c, err := s.redis.AcceptTCP()
 		if err != nil {
