@@ -1,3 +1,5 @@
 bin/raftis/raftis
 bin/genconfig/genconfig
+docker/raftis
+docker/genconfig
 *.go.swp

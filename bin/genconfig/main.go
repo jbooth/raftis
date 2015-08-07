@@ -57,7 +57,7 @@ func main() {
 			panic(err)
 		}
 	} else if strings.ToLower(mode) == "etcd-cluster" {
-		etcd.SetLogger(log.New(os.Stderr,"",log.LstdFlags))
+		etcd.SetLogger(log.New(os.Stderr, "", log.LstdFlags))
 		// configDir dataDir etcd-cluster group numHosts [etcdUrl]
 		numHosts, err := strconv.Atoi(args[3])
 		if err != nil {
@@ -186,7 +186,7 @@ func readHosts(hostPath string) (hosts []config.Host, err error) {
 
 func readEtcdShards(etcdUrl string, me config.Host, numHosts int) (shards []config.Shard, err error) {
 	etcdClient := etcd.NewClient([]string{etcdUrl})
-	log.Printf("connecting to etcd at url %s",etcdUrl)
+	log.Printf("connecting to etcd at url %s", etcdUrl)
 	namespacePrefix := "/raftis/cluster/"
 	amIAMaster, startIndex, err := tryBecomeBootstrapMaster(etcdClient, namespacePrefix, me.RedisAddr)
 	log.Printf("Am i a Master? %t", amIAMaster)
@@ -212,15 +212,17 @@ func readEtcdShards(etcdUrl string, me config.Host, numHosts int) (shards []conf
 		}
 		// assign to groups
 		hostsPerShard := 3
-		numShards := int(hosts / hostsPerShard)
-	
-        	for s := 0; s < numShards; s++ {
-                	for h := 0; h < hostsPerShard; h++ {
-                        hosts[hIdx].Group = fmt.Sprintf("slc0%d", h + 1)
-}
-}
-                        
+		numShards := int(len(hosts) / hostsPerShard)
 
+		var hIdx = 0
+		for s := 0; s < numShards; s++ {
+			for h := 0; h < hostsPerShard; h++ {
+				ho := hosts[hIdx]
+				ho.Group = fmt.Sprintf("slc0%d", h+1)
+				hosts[hIdx] = ho
+				hIdx++
+			}
+		}
 
 		// build shards
 		shards := config.Shards(100, hosts)
@@ -246,7 +248,7 @@ func tryBecomeBootstrapMaster(etcdClient *etcd.Client,
 		if ok && v.Message == "Key already exists" {
 			return false, 0, nil
 		} else {
-			log.Printf("Error in tryBecomeBootstrapMaster creating %s : %s", namespacePrefix + "bootstrapMaster", err)
+			log.Printf("Error in tryBecomeBootstrapMaster creating %s : %s", namespacePrefix+"bootstrapMaster", err)
 			return false, 0, err
 		}
 	}
